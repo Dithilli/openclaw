@@ -41,7 +41,7 @@ import { CommandLane } from "../process/lanes.js";
 import { normalizeAgentId, toAgentStoreSessionKey } from "../routing/session-key.js";
 import { defaultRuntime, type RuntimeEnv } from "../runtime.js";
 import { formatErrorMessage } from "./errors.js";
-import { isWithinActiveHours } from "./heartbeat-active-hours.js";
+import { isWithinActiveHours, resolveHeartbeatSchedule } from "./heartbeat-active-hours.js";
 import {
   buildCronEventPrompt,
   isCronSystemEvent,
@@ -93,6 +93,12 @@ export type HeartbeatSummary = {
 };
 
 const DEFAULT_HEARTBEAT_TARGET = "last";
+
+/**
+ * When a schedule-based agent is outside all active blocks, the runner uses
+ * this interval to re-check whether a block has become active.
+ */
+export const SCHEDULE_RECHECK_INTERVAL_MS = 60_000;
 
 // Prompt used when an async exec has completed and the result should be relayed to the user.
 // This overrides the standard heartbeat prompt to ensure the model responds with the exec result
@@ -215,7 +221,23 @@ export function resolveHeartbeatIntervalMs(
   cfg: OpenClawConfig,
   overrideEvery?: string,
   heartbeat?: HeartbeatConfig,
+  nowMs?: number,
 ) {
+  // When schedules are present and no explicit override, use the active schedule's interval
+  if (!overrideEvery && heartbeat?.schedules && heartbeat.schedules.length > 0) {
+    const schedule = resolveHeartbeatSchedule(cfg, heartbeat, nowMs);
+    if (schedule.active) {
+      try {
+        const ms = parseDurationMs(schedule.every, { defaultUnit: "m" });
+        return ms > 0 ? ms : null;
+      } catch {
+        return null;
+      }
+    }
+    // No active schedule block — return null (inactive)
+    return null;
+  }
+
   const raw =
     overrideEvery ??
     heartbeat?.every ??
@@ -794,8 +816,12 @@ export function startHeartbeatRunner(opts: {
   };
 
   const advanceAgentSchedule = (agent: HeartbeatAgentState, now: number) => {
+    // Re-resolve interval from the current schedule block (may differ from cached intervalMs)
+    const currentIntervalMs =
+      resolveHeartbeatIntervalMs(state.cfg, undefined, agent.heartbeat, now) ?? agent.intervalMs;
     agent.lastRunMs = now;
-    agent.nextDueMs = now + agent.intervalMs;
+    agent.intervalMs = currentIntervalMs;
+    agent.nextDueMs = now + currentIntervalMs;
   };
 
   const scheduleNext = () => {
@@ -837,17 +863,22 @@ export function startHeartbeatRunner(opts: {
     const nextAgents = new Map<string, HeartbeatAgentState>();
     const intervals: number[] = [];
     for (const agent of resolveHeartbeatAgents(cfg)) {
-      const intervalMs = resolveHeartbeatIntervalMs(cfg, undefined, agent.heartbeat);
-      if (!intervalMs) {
+      const intervalMs = resolveHeartbeatIntervalMs(cfg, undefined, agent.heartbeat, now);
+      // For schedule-based agents, use a 1-minute re-check interval when outside active blocks
+      // so the runner can detect when a schedule block becomes active.
+      const hasSchedules = Boolean(agent.heartbeat?.schedules?.length);
+      const effectiveIntervalMs =
+        intervalMs ?? (hasSchedules ? SCHEDULE_RECHECK_INTERVAL_MS : null);
+      if (!effectiveIntervalMs) {
         continue;
       }
-      intervals.push(intervalMs);
+      intervals.push(effectiveIntervalMs);
       const prevState = prevAgents.get(agent.agentId);
-      const nextDueMs = resolveNextDue(now, intervalMs, prevState);
+      const nextDueMs = resolveNextDue(now, effectiveIntervalMs, prevState);
       nextAgents.set(agent.agentId, {
         agentId: agent.agentId,
         heartbeat: agent.heartbeat,
-        intervalMs,
+        intervalMs: effectiveIntervalMs,
         lastRunMs: prevState?.lastRunMs,
         nextDueMs,
       });

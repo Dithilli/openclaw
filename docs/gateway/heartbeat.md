@@ -163,6 +163,52 @@ Restrict heartbeats to business hours in a specific timezone:
 
 Outside this window (before 9am or after 10pm Eastern), heartbeats are skipped. The next scheduled tick inside the window will run normally.
 
+### Schedule blocks
+
+For variable-interval heartbeats throughout the day, use `schedules` instead of
+(or in addition to) `every` + `activeHours`. Each schedule block defines a time
+window and its own interval. When `schedules` is present, it takes precedence
+over `every` and `activeHours`.
+
+```json5
+{
+  agents: {
+    defaults: {
+      heartbeat: {
+        target: "last",
+        // Multiple schedule blocks with per-block intervals
+        schedules: [
+          { start: "08:00", end: "23:00", every: "30m" },
+          { start: "23:00", end: "01:00", every: "1h" },
+          // 01:00-08:00 = off (no schedule covers it)
+        ],
+        activeHours: {
+          timezone: "America/Chicago", // timezone applies to schedule blocks too
+        },
+      },
+    },
+  },
+}
+```
+
+- Each block has `start` (HH:MM, inclusive), `end` (HH:MM, exclusive), and `every` (duration string).
+- Overnight wraparound is supported (for example `23:00` to `01:00`).
+- Times not covered by any block are treated as inactive (heartbeats are skipped).
+- If blocks overlap, the first matching block wins.
+- The `timezone` from `activeHours` (or the agent `userTimezone`) applies to all schedule blocks.
+- Legacy config (`every` + `activeHours` without `schedules`) continues to work unchanged.
+- An empty `schedules` array is treated as if `schedules` is not set (falls back to legacy behavior).
+
+### 24/7 setup
+
+If you want heartbeats to run all day, use one of these patterns:
+
+- Omit `activeHours` entirely (no time-window restriction; this is the default behavior).
+- Set a full-day window: `activeHours: { start: "00:00", end: "24:00" }`.
+
+Do not set the same `start` and `end` time (for example `08:00` to `08:00`).
+That is treated as a zero-width window, so heartbeats are always skipped.
+
 ### Multi account example
 
 Use `accountId` to target a specific account on multi-account channels like Telegram:

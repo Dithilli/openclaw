@@ -206,6 +206,19 @@ export type AgentDefaultsConfig = {
       /** Timezone for the window ("user", "local", or IANA TZ id). Default: "user". */
       timezone?: string;
     };
+    /**
+     * Multiple schedule blocks with per-block intervals.
+     * When present, overrides both `every` and `activeHours`.
+     * Timezone is inherited from the heartbeat-level `activeHours.timezone` or agent `userTimezone`.
+     */
+    schedules?: Array<{
+      /** Start time (24h, HH:MM). Inclusive. */
+      start: string;
+      /** End time (24h, HH:MM). Exclusive. Supports overnight wraparound (e.g. 23:00→01:00). */
+      end: string;
+      /** Heartbeat interval for this window (duration string). */
+      every: string;
+    }>;
     /** Heartbeat model override (provider/model). */
     model?: string;
     /** Session key for heartbeat runs ("main" or explicit session key). */

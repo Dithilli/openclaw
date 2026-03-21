@@ -10,6 +10,14 @@ import {
 } from "./zod-schema.core.js";
 import { sensitive } from "./zod-schema.sensitive.js";
 
+const ScheduleBlockSchema = z
+  .object({
+    start: z.string(),
+    end: z.string(),
+    every: z.string(),
+  })
+  .strict();
+
 export const HeartbeatSchema = z
   .object({
     every: z.string().optional(),
@@ -21,6 +29,7 @@ export const HeartbeatSchema = z
       })
       .strict()
       .optional(),
+    schedules: z.array(ScheduleBlockSchema).optional(),
     model: z.string().optional(),
     session: z.string().optional(),
     includeReasoning: z.boolean().optional(),
@@ -32,32 +41,20 @@ export const HeartbeatSchema = z
   })
   .strict()
   .superRefine((val, ctx) => {
-    if (!val.every) {
-      return;
-    }
-    try {
-      parseDurationMs(val.every, { defaultUnit: "m" });
-    } catch {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["every"],
-        message: "invalid duration (use ms, s, m, h)",
-      });
-    }
-
-    const active = val.activeHours;
-    if (!active) {
-      return;
-    }
     const timePattern = /^([01]\d|2[0-3]|24):([0-5]\d)$/;
-    const validateTime = (raw: string | undefined, opts: { allow24: boolean }, path: string) => {
+    const validateTime = (
+      raw: string | undefined,
+      opts: { allow24: boolean },
+      basePath: (string | number)[],
+      field: string,
+    ) => {
       if (!raw) {
         return;
       }
       if (!timePattern.test(raw)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          path: ["activeHours", path],
+          path: [...basePath, field],
           message: 'invalid time (use "HH:MM" 24h format)',
         });
         return;
@@ -68,7 +65,7 @@ export const HeartbeatSchema = z
       if (hour === 24 && minute !== 0) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          path: ["activeHours", path],
+          path: [...basePath, field],
           message: "invalid time (24:00 is the only allowed 24:xx value)",
         });
         return;
@@ -76,14 +73,49 @@ export const HeartbeatSchema = z
       if (hour === 24 && !opts.allow24) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          path: ["activeHours", path],
+          path: [...basePath, field],
           message: "invalid time (start cannot be 24:00)",
         });
       }
     };
 
-    validateTime(active.start, { allow24: false }, "start");
-    validateTime(active.end, { allow24: true }, "end");
+    if (val.every) {
+      try {
+        parseDurationMs(val.every, { defaultUnit: "m" });
+      } catch {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["every"],
+          message: "invalid duration (use ms, s, m, h)",
+        });
+      }
+    }
+
+    const active = val.activeHours;
+    if (active) {
+      validateTime(active.start, { allow24: false }, ["activeHours"], "start");
+      validateTime(active.end, { allow24: true }, ["activeHours"], "end");
+    }
+
+    if (val.schedules) {
+      for (let i = 0; i < val.schedules.length; i++) {
+        const block = val.schedules[i];
+        if (!block) {
+          continue;
+        }
+        validateTime(block.start, { allow24: false }, ["schedules", i], "start");
+        validateTime(block.end, { allow24: true }, ["schedules", i], "end");
+        try {
+          parseDurationMs(block.every, { defaultUnit: "m" });
+        } catch {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["schedules", i, "every"],
+            message: "invalid duration (use ms, s, m, h)",
+          });
+        }
+      }
+    }
   })
   .optional();
 

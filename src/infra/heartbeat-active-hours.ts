@@ -67,11 +67,66 @@ function resolveMinutesInTimeZone(nowMs: number, timeZone: string): number | nul
   }
 }
 
+function isTimeInWindow(currentMin: number, startMin: number, endMin: number): boolean {
+  if (startMin === endMin) {
+    return false;
+  }
+  if (endMin > startMin) {
+    return currentMin >= startMin && currentMin < endMin;
+  }
+  // Overnight wraparound (e.g. 23:00 → 01:00)
+  return currentMin >= startMin || currentMin < endMin;
+}
+
+export type HeartbeatScheduleResult = { active: true; every: string } | { active: false };
+
+/**
+ * Resolve which schedule block (if any) covers the current time.
+ * Returns the matched block's `every` interval, or `{ active: false }` if no block matches.
+ * First matching block wins when schedules overlap.
+ */
+export function resolveHeartbeatSchedule(
+  cfg: OpenClawConfig,
+  heartbeat?: HeartbeatConfig,
+  nowMs?: number,
+): HeartbeatScheduleResult {
+  const schedules = heartbeat?.schedules;
+  if (!schedules || schedules.length === 0) {
+    return { active: false };
+  }
+
+  const timeZone = resolveActiveHoursTimezone(cfg, heartbeat?.activeHours?.timezone);
+  const currentMin = resolveMinutesInTimeZone(nowMs ?? Date.now(), timeZone);
+  if (currentMin === null) {
+    return { active: false };
+  }
+
+  for (const block of schedules) {
+    const startMin = parseActiveHoursTime({ allow24: false }, block.start);
+    const endMin = parseActiveHoursTime({ allow24: true }, block.end);
+    if (startMin === null || endMin === null) {
+      continue;
+    }
+    if (isTimeInWindow(currentMin, startMin, endMin)) {
+      return { active: true, every: block.every };
+    }
+  }
+
+  return { active: false };
+}
+
 export function isWithinActiveHours(
   cfg: OpenClawConfig,
   heartbeat?: HeartbeatConfig,
   nowMs?: number,
 ): boolean {
+  // When schedules are present, they override activeHours
+  const schedules = heartbeat?.schedules;
+  if (schedules && schedules.length > 0) {
+    const result = resolveHeartbeatSchedule(cfg, heartbeat, nowMs);
+    return result.active;
+  }
+
   const active = heartbeat?.activeHours;
   if (!active) {
     return true;
