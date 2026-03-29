@@ -403,6 +403,51 @@ describe("discoverOpenClawPlugins", () => {
     },
   );
 
+  it("discovers symlinked plugin directories in extensions", async () => {
+    const stateDir = makeTempDir();
+    const globalExt = path.join(stateDir, "extensions");
+    mkdirSafe(globalExt);
+
+    // Create the real plugin directory outside extensions
+    const realPluginDir = path.join(stateDir, "external", "my-plugin");
+    mkdirSafe(path.join(realPluginDir, "src"));
+    writePluginPackageManifest({
+      packageDir: realPluginDir,
+      packageName: "my-plugin",
+      extensions: ["./src/index.js"],
+    });
+    fs.writeFileSync(path.join(realPluginDir, "src", "index.js"), "module.exports = {}", "utf-8");
+
+    // Symlink the plugin directory into extensions
+    fs.symlinkSync(realPluginDir, path.join(globalExt, "my-plugin"));
+
+    const result = await discoverWithStateDir(stateDir, {});
+
+    const ids = result.candidates.map((c) => c.idHint);
+    expect(ids).toContain("my-plugin");
+  });
+
+  it("skips broken symlinks without crashing", async () => {
+    const stateDir = makeTempDir();
+    const globalExt = path.join(stateDir, "extensions");
+    mkdirSafe(globalExt);
+
+    // Create a dangling symlink
+    fs.symlinkSync("/nonexistent/path/ghost-plugin", path.join(globalExt, "ghost-plugin"));
+
+    // Add a real plugin so we can verify discovery continues past the broken symlink
+    fs.writeFileSync(path.join(globalExt, "real.ts"), "export default function () {}", "utf-8");
+
+    const result = await discoverWithStateDir(stateDir, {});
+
+    const ids = result.candidates.map((c) => c.idHint);
+    expect(ids).not.toContain("ghost-plugin");
+    expect(ids).toContain("real");
+    // Broken symlink should not produce error diagnostics
+    const errorDiags = result.diagnostics.filter((d) => d.level === "error");
+    expect(errorDiags).toHaveLength(0);
+  });
+
   it("reuses discovery results from cache until cleared", async () => {
     const stateDir = makeTempDir();
     const globalExt = path.join(stateDir, "extensions");
