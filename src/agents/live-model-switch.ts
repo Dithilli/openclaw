@@ -60,27 +60,32 @@ export function resolveLiveSessionModelSelection(params: {
   const hasExplicitOverride = Boolean(entry?.modelOverride?.trim());
   const callerDefault = { provider: params.defaultProvider, model: params.defaultModel };
 
-  // Always resolve the config-level default when an agentId is present so that
-  // mid-run `/model reset` (clearing modelOverride) is detected as a switch
-  // back to the agent default rather than silently staying on callerDefault.
-  const configDefault = agentId
-    ? resolveDefaultModelForAgent({ cfg, agentId })
-    : callerDefault;
+  // Lazy accessor for the config-level default.  Only needed when there is an
+  // explicit override but its provider is blank (unusual edge case).  In all
+  // other branches (new session, override cleared) we use caller-supplied
+  // defaults which already reflect the in-flight resolved model (parent-session
+  // overrides, heartbeat model config, etc.).  Previously this was evaluated
+  // eagerly on every call, which both performed unnecessary work and defeated
+  // the purpose of the fix for #57063 / #56788 (caller defaults ignored).
+  let configDefault: { provider: string; model: string } | null = null;
+  const getConfigDefault = () => {
+    if (!configDefault) {
+      configDefault = agentId ? resolveDefaultModelForAgent({ cfg, agentId }) : callerDefault;
+    }
+    return configDefault;
+  };
 
-  // When there is an explicit override, use it; when the session entry exists
-  // but has no override, use callerDefault (the in-flight resolved model);
-  // when there is no entry at all, use configDefault so that a cleared
-  // override is distinguishable from "never set".
-  const entryExists = entry !== undefined && entry !== null;
-
-  const provider = runtimeProvider
-    || (hasExplicitOverride
-      ? (entry.providerOverride?.trim() || configDefault.provider)
-      : entryExists ? callerDefault.provider : configDefault.provider);
-  const model = runtimeModel
-    || (hasExplicitOverride
-      ? entry.modelOverride!.trim()
-      : entryExists ? callerDefault.model : configDefault.model);
+  // When there is an explicit override, use it.  When there is no override
+  // (whether the entry exists with override cleared, or no entry at all),
+  // use caller-supplied defaults — those already carry the resolved model
+  // for the in-flight run.
+  const provider =
+    runtimeProvider ||
+    (hasExplicitOverride
+      ? entry.providerOverride?.trim() || getConfigDefault().provider
+      : callerDefault.provider);
+  const model =
+    runtimeModel || (hasExplicitOverride ? entry.modelOverride!.trim() : callerDefault.model);
 
   const authProfileId = entry?.authProfileOverride?.trim() || undefined;
   return {

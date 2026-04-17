@@ -81,10 +81,10 @@ describe("live model switch", () => {
       authProfileId: "profile-gpt",
       authProfileIdSource: "user",
     });
-    expect(state.resolveDefaultModelForAgentMock).toHaveBeenCalledWith({
-      cfg: { session: { store: "/tmp/custom-store.json" } },
-      agentId: "reply",
-    });
+    // With lazy evaluation, resolveDefaultModelForAgent is NOT called when the
+    // session's providerOverride is non-blank (the returned provider is
+    // sourced from the override itself).
+    expect(state.resolveDefaultModelForAgentMock).not.toHaveBeenCalled();
     expect(state.resolveStorePathMock).toHaveBeenCalledWith("/tmp/custom-store.json", {
       agentId: "reply",
     });
@@ -259,12 +259,10 @@ describe("live model switch", () => {
       authProfileId: undefined,
       authProfileIdSource: undefined,
     });
-    // resolveDefaultModelForAgent SHOULD be called when there is an explicit
-    // override (it provides the fallback provider when providerOverride is absent).
-    expect(state.resolveDefaultModelForAgentMock).toHaveBeenCalledWith({
-      cfg: { session: { store: "/tmp/store.json" } },
-      agentId: "reply",
-    });
+    // With lazy evaluation, resolveDefaultModelForAgent is NOT called when the
+    // session's providerOverride is non-blank (the override already supplies
+    // the provider).  It would only be called if providerOverride were empty.
+    expect(state.resolveDefaultModelForAgentMock).not.toHaveBeenCalled();
   });
 
   it("does not trigger spurious switch for heartbeat model (#56788)", async () => {

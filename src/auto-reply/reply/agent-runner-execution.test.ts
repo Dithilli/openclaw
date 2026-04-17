@@ -20,6 +20,8 @@ vi.mock("../../agents/model-fallback.js", () => ({
     err instanceof Error &&
     err.name === "FallbackSummaryError" &&
     Array.isArray((err as { attempts?: unknown[] }).attempts),
+  isLiveSessionModelSwitchError: (err: unknown) =>
+    err instanceof Error && err.name === "LiveSessionModelSwitchError",
 }));
 
 vi.mock("../../agents/model-selection.js", () => ({
