@@ -647,7 +647,23 @@ function discoverInDirectory(params: {
 
   for (const entry of entries) {
     const fullPath = path.join(params.dir, entry.name);
-    if (entry.isFile()) {
+    // Resolve symlinks so plugins installed into the extensions directory via
+    // a symlink to a dev-tree checkout (common developer workflow) are
+    // discovered correctly.  `entry.isFile()` / `entry.isDirectory()` return
+    // `false` for symlinks without an explicit stat() resolution.
+    const isSymlink = entry.isSymbolicLink();
+    let resolvedStat: fs.Stats | null = null;
+    if (isSymlink) {
+      try {
+        resolvedStat = fs.statSync(fullPath);
+      } catch {
+        // Broken symlink — skip
+        continue;
+      }
+    }
+    const isFile = entry.isFile() || (resolvedStat?.isFile() ?? false);
+    const isDirectory = entry.isDirectory() || (resolvedStat?.isDirectory() ?? false);
+    if (isFile) {
       if (!isExtensionFile(fullPath)) {
         continue;
       }
@@ -663,7 +679,7 @@ function discoverInDirectory(params: {
         workspaceDir: params.workspaceDir,
       });
     }
-    if (!entry.isDirectory()) {
+    if (!isDirectory) {
       continue;
     }
     if (params.skipDirectories?.has(entry.name)) {
