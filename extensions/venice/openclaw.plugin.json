@@ -4,7 +4,9 @@
     "onStartup": false
   },
   "enabledByDefault": true,
-  "providers": ["venice"],
+  "providers": [
+    "venice"
+  ],
   "providerAuthChoices": [
     {
       "provider": "venice",
@@ -29,8 +31,12 @@
     "providers": [
       {
         "id": "venice",
-        "authMethods": ["api-key"],
-        "envVars": ["VENICE_API_KEY"]
+        "authMethods": [
+          "api-key"
+        ],
+        "envVars": [
+          "VENICE_API_KEY"
+        ]
       }
     ]
   },
@@ -41,191 +47,56 @@
         "api": "openai-completions",
         "models": [
           {
-            "id": "llama-3.3-70b",
-            "name": "Llama 3.3 70B",
-            "reasoning": false,
-            "input": ["text"],
-            "contextWindow": 128000,
-            "maxTokens": 4096,
-            "compat": {
-              "supportsUsageInStreaming": false
-            }
-          },
-          {
-            "id": "llama-3.2-3b",
-            "name": "Llama 3.2 3B",
-            "reasoning": false,
-            "input": ["text"],
-            "contextWindow": 128000,
-            "maxTokens": 4096,
-            "compat": {
-              "supportsUsageInStreaming": false
-            }
-          },
-          {
-            "id": "hermes-3-llama-3.1-405b",
-            "name": "Hermes 3 Llama 3.1 405B",
-            "reasoning": false,
-            "input": ["text"],
-            "contextWindow": 128000,
-            "maxTokens": 16384,
-            "compat": {
-              "supportsUsageInStreaming": false,
-              "supportsTools": false
-            }
-          },
-          {
-            "id": "qwen3-235b-a22b-thinking-2507",
-            "name": "Qwen3 235B Thinking",
+            "id": "zai-org-glm-5-2",
+            "name": "GLM 5.2",
             "reasoning": true,
             "input": ["text"],
-            "contextWindow": 128000,
-            "maxTokens": 16384,
+            "contextWindow": 1000000,
+            "maxTokens": 131072,
             "compat": {
               "supportsUsageInStreaming": false
             }
           },
           {
-            "id": "qwen3-235b-a22b-instruct-2507",
-            "name": "Qwen3 235B Instruct",
-            "reasoning": false,
-            "input": ["text"],
-            "contextWindow": 128000,
-            "maxTokens": 16384,
-            "compat": {
-              "supportsUsageInStreaming": false
-            }
-          },
-          {
-            "id": "qwen3-coder-480b-a35b-instruct",
-            "name": "Qwen3 Coder 480B",
-            "reasoning": false,
-            "input": ["text"],
-            "contextWindow": 256000,
-            "maxTokens": 65536,
-            "compat": {
-              "supportsUsageInStreaming": false
-            }
-          },
-          {
-            "id": "qwen3-coder-480b-a35b-instruct-turbo",
-            "name": "Qwen3 Coder 480B Turbo",
-            "reasoning": false,
-            "input": ["text"],
-            "contextWindow": 256000,
-            "maxTokens": 65536,
-            "compat": {
-              "supportsUsageInStreaming": false
-            }
-          },
-          {
-            "id": "qwen3-5-35b-a3b",
-            "name": "Qwen3.5 35B A3B",
-            "reasoning": true,
-            "input": ["text", "image"],
-            "contextWindow": 256000,
-            "maxTokens": 65536,
-            "compat": {
-              "supportsUsageInStreaming": false
-            }
-          },
-          {
-            "id": "qwen3-next-80b",
-            "name": "Qwen3 Next 80B",
-            "reasoning": false,
-            "input": ["text"],
-            "contextWindow": 256000,
-            "maxTokens": 16384,
-            "compat": {
-              "supportsUsageInStreaming": false
-            }
-          },
-          {
-            "id": "qwen3-vl-235b-a22b",
-            "name": "Qwen3 VL 235B (Vision)",
-            "reasoning": false,
-            "input": ["text", "image"],
-            "contextWindow": 256000,
-            "maxTokens": 16384,
-            "compat": {
-              "supportsUsageInStreaming": false
-            }
-          },
-          {
-            "id": "qwen3-4b",
-            "name": "Venice Small (Qwen3 4B)",
+            "id": "zai-org-glm-5-1",
+            "name": "GLM 5.1",
             "reasoning": true,
             "input": ["text"],
-            "contextWindow": 32000,
-            "maxTokens": 4096,
+            "contextWindow": 200000,
+            "maxTokens": 24000,
             "compat": {
               "supportsUsageInStreaming": false
             }
           },
           {
-            "id": "deepseek-v3.2",
-            "name": "DeepSeek V3.2",
+            "id": "zai-org-glm-5",
+            "name": "GLM 5",
             "reasoning": true,
             "input": ["text"],
-            "contextWindow": 160000,
+            "contextWindow": 198000,
+            "maxTokens": 32000,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "z-ai-glm-5-turbo",
+            "name": "GLM 5 Turbo",
+            "reasoning": true,
+            "input": ["text"],
+            "contextWindow": 200000,
             "maxTokens": 32768,
             "compat": {
-              "supportsUsageInStreaming": false,
-              "supportsTools": false
+              "supportsUsageInStreaming": false
             }
           },
           {
-            "id": "venice-uncensored",
-            "name": "Venice Uncensored (Dolphin-Mistral)",
-            "reasoning": false,
-            "input": ["text"],
-            "contextWindow": 32000,
-            "maxTokens": 4096,
-            "compat": {
-              "supportsUsageInStreaming": false,
-              "supportsTools": false
-            }
-          },
-          {
-            "id": "mistral-31-24b",
-            "name": "Venice Medium (Mistral)",
-            "reasoning": false,
+            "id": "z-ai-glm-5v-turbo",
+            "name": "GLM 5V Turbo",
+            "reasoning": true,
             "input": ["text", "image"],
-            "contextWindow": 128000,
-            "maxTokens": 4096,
-            "compat": {
-              "supportsUsageInStreaming": false
-            }
-          },
-          {
-            "id": "google-gemma-3-27b-it",
-            "name": "Google Gemma 3 27B Instruct",
-            "reasoning": false,
-            "input": ["text", "image"],
-            "contextWindow": 198000,
-            "maxTokens": 16384,
-            "compat": {
-              "supportsUsageInStreaming": false
-            }
-          },
-          {
-            "id": "openai-gpt-oss-120b",
-            "name": "OpenAI GPT OSS 120B",
-            "reasoning": false,
-            "input": ["text"],
-            "contextWindow": 128000,
-            "maxTokens": 16384,
-            "compat": {
-              "supportsUsageInStreaming": false
-            }
-          },
-          {
-            "id": "nvidia-nemotron-3-nano-30b-a3b",
-            "name": "NVIDIA Nemotron 3 Nano 30B",
-            "reasoning": false,
-            "input": ["text"],
-            "contextWindow": 128000,
-            "maxTokens": 16384,
+            "contextWindow": 200000,
+            "maxTokens": 32768,
             "compat": {
               "supportsUsageInStreaming": false
             }
@@ -237,6 +108,17 @@
             "input": ["text"],
             "contextWindow": 128000,
             "maxTokens": 24000,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "zai-org-glm-4.7-flash",
+            "name": "GLM 4.7 Flash",
+            "reasoning": true,
+            "input": ["text"],
+            "contextWindow": 128000,
+            "maxTokens": 16384,
             "compat": {
               "supportsUsageInStreaming": false
             }
@@ -264,30 +146,63 @@
             }
           },
           {
-            "id": "zai-org-glm-4.7-flash",
-            "name": "GLM 4.7 Flash",
-            "reasoning": true,
-            "input": ["text"],
+            "id": "venice-uncensored-1-2",
+            "name": "Venice Uncensored 1.2",
+            "reasoning": false,
+            "input": ["text", "image"],
             "contextWindow": 128000,
-            "maxTokens": 16384,
+            "maxTokens": 8192,
             "compat": {
               "supportsUsageInStreaming": false
             }
           },
           {
-            "id": "zai-org-glm-5",
-            "name": "GLM 5",
+            "id": "venice-uncensored-role-play",
+            "name": "Venice Role Play Uncensored",
+            "reasoning": false,
+            "input": ["text", "image"],
+            "contextWindow": 128000,
+            "maxTokens": 4096,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "qwen-3-7-max",
+            "name": "Qwen 3.7 Max",
             "reasoning": true,
-            "input": ["text"],
-            "contextWindow": 198000,
-            "maxTokens": 32000,
+            "input": ["text", "image"],
+            "contextWindow": 1000000,
+            "maxTokens": 65536,
             "compat": {
               "supportsUsageInStreaming": false
             }
           },
           {
-            "id": "kimi-k2-5",
-            "name": "Kimi K2.5",
+            "id": "qwen-3-7-plus",
+            "name": "Qwen 3.7 Plus",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 1000000,
+            "maxTokens": 65536,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "qwen-3-6-plus",
+            "name": "Qwen 3.6 Plus Uncensored",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 1000000,
+            "maxTokens": 65536,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "qwen3-6-27b",
+            "name": "Qwen 3.6 27B",
             "reasoning": true,
             "input": ["text", "image"],
             "contextWindow": 256000,
@@ -297,8 +212,140 @@
             }
           },
           {
-            "id": "kimi-k2-thinking",
-            "name": "Kimi K2 Thinking",
+            "id": "qwen3-5-9b",
+            "name": "Qwen 3.5 9B",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 256000,
+            "maxTokens": 32768,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "qwen3-5-397b-a17b",
+            "name": "Qwen 3.5 397B",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 128000,
+            "maxTokens": 32768,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "qwen3-5-35b-a3b",
+            "name": "Qwen3.5 35B A3B",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 256000,
+            "maxTokens": 65536,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "qwen3-235b-a22b-thinking-2507",
+            "name": "Qwen3 235B Thinking",
+            "reasoning": true,
+            "input": ["text"],
+            "contextWindow": 128000,
+            "maxTokens": 16384,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "qwen3-235b-a22b-instruct-2507",
+            "name": "Qwen3 235B Instruct",
+            "reasoning": false,
+            "input": ["text"],
+            "contextWindow": 128000,
+            "maxTokens": 16384,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "qwen3-next-80b",
+            "name": "Qwen3 Next 80B",
+            "reasoning": false,
+            "input": ["text"],
+            "contextWindow": 256000,
+            "maxTokens": 16384,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "qwen3-vl-235b-a22b",
+            "name": "Qwen3 VL 235B (Vision)",
+            "reasoning": false,
+            "input": ["text", "image"],
+            "contextWindow": 256000,
+            "maxTokens": 16384,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "qwen3-coder-480b-a35b-instruct-turbo",
+            "name": "Qwen3 Coder 480B Turbo",
+            "reasoning": false,
+            "input": ["text"],
+            "contextWindow": 256000,
+            "maxTokens": 65536,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "google-gemma-4-26b-a4b-it",
+            "name": "Google Gemma 4 26B A4B Instruct",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 256000,
+            "maxTokens": 8192,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "google-gemma-4-31b-it",
+            "name": "Google Gemma 4 31B Instruct",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 256000,
+            "maxTokens": 8192,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "gemma-4-uncensored",
+            "name": "Gemma 4 Uncensored",
+            "reasoning": false,
+            "input": ["text", "image"],
+            "contextWindow": 256000,
+            "maxTokens": 8192,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "google-gemma-3-27b-it",
+            "name": "Google Gemma 3 27B Instruct",
+            "reasoning": false,
+            "input": ["text", "image"],
+            "contextWindow": 198000,
+            "maxTokens": 16384,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "arcee-trinity-large-thinking",
+            "name": "Trinity Large Thinking",
             "reasoning": true,
             "input": ["text"],
             "contextWindow": 256000,
@@ -308,23 +355,168 @@
             }
           },
           {
-            "id": "minimax-m21",
-            "name": "MiniMax M2.1",
+            "id": "grok-4-3",
+            "name": "Grok 4.3",
             "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 1000000,
+            "maxTokens": 32000,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "grok-4-20",
+            "name": "Grok 4.20",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 2000000,
+            "maxTokens": 128000,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "grok-4-20-multi-agent",
+            "name": "Grok 4.20 Multi-Agent",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 2000000,
+            "maxTokens": 128000,
+            "compat": {
+              "supportsUsageInStreaming": false,
+              "supportsTools": false
+            }
+          },
+          {
+            "id": "grok-build-0-1",
+            "name": "Grok Build 0.1",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 256000,
+            "maxTokens": 65536,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "mistral-small-3-2-24b-instruct",
+            "name": "Mistral Small 3.2 24B Instruct",
+            "reasoning": false,
             "input": ["text"],
-            "contextWindow": 198000,
+            "contextWindow": 256000,
+            "maxTokens": 16384,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "mistral-small-2603",
+            "name": "Mistral Small 4",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 256000,
+            "maxTokens": 65536,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "hermes-3-llama-3.1-405b",
+            "name": "Hermes 3 Llama 3.1 405B",
+            "reasoning": false,
+            "input": ["text"],
+            "contextWindow": 128000,
+            "maxTokens": 16384,
+            "compat": {
+              "supportsUsageInStreaming": false,
+              "supportsTools": false
+            }
+          },
+          {
+            "id": "gemini-3-1-pro-preview",
+            "name": "Gemini 3.1 Pro (via Venice)",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 1000000,
             "maxTokens": 32768,
             "compat": {
               "supportsUsageInStreaming": false
             }
           },
           {
-            "id": "minimax-m25",
-            "name": "MiniMax M2.5",
+            "id": "gemini-3-5-flash",
+            "name": "Gemini 3.5 Flash",
             "reasoning": true,
-            "input": ["text"],
-            "contextWindow": 198000,
-            "maxTokens": 32768,
+            "input": ["text", "image"],
+            "contextWindow": 1000000,
+            "maxTokens": 65536,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "gemini-3-flash-preview",
+            "name": "Gemini 3 Flash (via Venice)",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 256000,
+            "maxTokens": 65536,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "claude-fable-5",
+            "name": "Claude Fable 5",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 1000000,
+            "maxTokens": 128000,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "claude-opus-4-8",
+            "name": "Claude Opus 4.8",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 1000000,
+            "maxTokens": 128000,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "claude-opus-4-8-fast",
+            "name": "Claude Opus 4.8 Fast",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 1000000,
+            "maxTokens": 128000,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "claude-opus-4-7",
+            "name": "Claude Opus 4.7",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 1000000,
+            "maxTokens": 128000,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "claude-opus-4-7-fast",
+            "name": "Claude Opus 4.7 Fast",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 1000000,
+            "maxTokens": 128000,
             "compat": {
               "supportsUsageInStreaming": false
             }
@@ -341,12 +533,168 @@
             }
           },
           {
+            "id": "claude-opus-4-6-fast",
+            "name": "Claude Opus 4.6 Fast",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 1000000,
+            "maxTokens": 128000,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "claude-opus-4-5",
+            "name": "Claude Opus 4.5",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 198000,
+            "maxTokens": 32768,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
             "id": "claude-sonnet-4-6",
             "name": "Claude Sonnet 4.6 (via Venice)",
             "reasoning": true,
             "input": ["text", "image"],
             "contextWindow": 1000000,
             "maxTokens": 64000,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "claude-sonnet-4-5",
+            "name": "Claude Sonnet 4.5",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 198000,
+            "maxTokens": 64000,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "openai-gpt-oss-120b",
+            "name": "OpenAI GPT OSS 120B",
+            "reasoning": false,
+            "input": ["text"],
+            "contextWindow": 128000,
+            "maxTokens": 16384,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "kimi-k2-6",
+            "name": "Kimi K2.6",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 256000,
+            "maxTokens": 65536,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "kimi-k2-7-code",
+            "name": "Kimi K2.7 Code",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 256000,
+            "maxTokens": 65536,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "kimi-k2-5",
+            "name": "Kimi K2.5",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 256000,
+            "maxTokens": 65536,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "xiaomi-mimo-v2-5",
+            "name": "MiMo-V2.5",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 1000000,
+            "maxTokens": 65536,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "deepseek-v4-pro",
+            "name": "DeepSeek V4 Pro",
+            "reasoning": true,
+            "input": ["text"],
+            "contextWindow": 1000000,
+            "maxTokens": 32768,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "deepseek-v4-flash",
+            "name": "DeepSeek V4 Flash",
+            "reasoning": true,
+            "input": ["text"],
+            "contextWindow": 1000000,
+            "maxTokens": 32768,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "deepseek-v3.2",
+            "name": "DeepSeek V3.2",
+            "reasoning": true,
+            "input": ["text"],
+            "contextWindow": 160000,
+            "maxTokens": 32768,
+            "compat": {
+              "supportsUsageInStreaming": false,
+              "supportsTools": false
+            }
+          },
+          {
+            "id": "aion-labs-aion-2-0",
+            "name": "Aion 2.0",
+            "reasoning": true,
+            "input": ["text"],
+            "contextWindow": 128000,
+            "maxTokens": 32768,
+            "compat": {
+              "supportsUsageInStreaming": false,
+              "supportsTools": false
+            }
+          },
+          {
+            "id": "llama-3.2-3b",
+            "name": "Llama 3.2 3B",
+            "reasoning": false,
+            "input": ["text"],
+            "contextWindow": 128000,
+            "maxTokens": 4096,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "llama-3.3-70b",
+            "name": "Llama 3.3 70B",
+            "reasoning": false,
+            "input": ["text"],
+            "contextWindow": 128000,
+            "maxTokens": 4096,
             "compat": {
               "supportsUsageInStreaming": false
             }
@@ -396,6 +744,50 @@
             }
           },
           {
+            "id": "openai-gpt-54-pro",
+            "name": "GPT-5.4 Pro",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 1000000,
+            "maxTokens": 128000,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "openai-gpt-54-mini",
+            "name": "GPT-5.4 Mini",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 400000,
+            "maxTokens": 128000,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "openai-gpt-55",
+            "name": "GPT-5.5",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 1000000,
+            "maxTokens": 131072,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "openai-gpt-55-pro",
+            "name": "GPT-5.5 Pro",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 1000000,
+            "maxTokens": 128000,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
             "id": "openai-gpt-4o-2024-11-20",
             "name": "GPT-4o (via Venice)",
             "reasoning": false,
@@ -418,10 +810,21 @@
             }
           },
           {
-            "id": "gemini-3-pro-preview",
-            "name": "Gemini 3 Pro (via Venice)",
+            "id": "minimax-m3-preview",
+            "name": "MiniMax M3 Preview",
             "reasoning": true,
-            "input": ["text", "image"],
+            "input": ["text"],
+            "contextWindow": 524288,
+            "maxTokens": 65536,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "minimax-m25",
+            "name": "MiniMax M2.5",
+            "reasoning": true,
+            "input": ["text"],
             "contextWindow": 198000,
             "maxTokens": 32768,
             "compat": {
@@ -429,34 +832,56 @@
             }
           },
           {
-            "id": "gemini-3-1-pro-preview",
-            "name": "Gemini 3.1 Pro (via Venice)",
+            "id": "minimax-m27",
+            "name": "MiniMax M2.7",
             "reasoning": true,
-            "input": ["text", "image"],
-            "contextWindow": 1000000,
+            "input": ["text"],
+            "contextWindow": 198000,
             "maxTokens": 32768,
             "compat": {
               "supportsUsageInStreaming": false
             }
           },
           {
-            "id": "gemini-3-flash-preview",
-            "name": "Gemini 3 Flash (via Venice)",
+            "id": "mercury-2",
+            "name": "Mercury 2",
             "reasoning": true,
-            "input": ["text", "image"],
-            "contextWindow": 256000,
-            "maxTokens": 65536,
+            "input": ["text"],
+            "contextWindow": 128000,
+            "maxTokens": 50000,
             "compat": {
               "supportsUsageInStreaming": false
             }
           },
           {
-            "id": "grok-41-fast",
-            "name": "Grok 4.1 Fast (via Venice)",
+            "id": "nvidia-nemotron-3-nano-30b-a3b",
+            "name": "NVIDIA Nemotron 3 Nano 30B",
+            "reasoning": false,
+            "input": ["text"],
+            "contextWindow": 128000,
+            "maxTokens": 16384,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "nvidia-nemotron-3-ultra-550b-a55b",
+            "name": "NVIDIA Nemotron 3 Ultra",
             "reasoning": true,
-            "input": ["text", "image"],
-            "contextWindow": 1000000,
-            "maxTokens": 30000,
+            "input": ["text"],
+            "contextWindow": 256000,
+            "maxTokens": 32768,
+            "compat": {
+              "supportsUsageInStreaming": false
+            }
+          },
+          {
+            "id": "nvidia-nemotron-cascade-2-30b-a3b",
+            "name": "Nemotron Cascade 2 30B A3B",
+            "reasoning": true,
+            "input": ["text"],
+            "contextWindow": 256000,
+            "maxTokens": 32768,
             "compat": {
               "supportsUsageInStreaming": false
             }
