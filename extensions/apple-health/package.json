@@ -1,0 +1,18 @@
+{
+  "name": "@openclaw/apple-health",
+  "version": "2026.6.11",
+  "private": true,
+  "description": "OpenClaw Apple Health ingestion plugin",
+  "type": "module",
+  "devDependencies": {
+    "@openclaw/plugin-sdk": "workspace:*"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  }
+}

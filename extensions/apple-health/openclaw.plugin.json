@@ -1,0 +1,46 @@
+{
+  "id": "apple-health",
+  "activation": {
+    "onStartup": true
+  },
+  "name": "Apple Health",
+  "description": "Ingest Apple Health workouts and metrics pushed from Health Auto Export, query them from the agent, and schedule proactive summaries.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "$defs": {
+      "secretRef": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": ["env", "file", "exec"]
+          },
+          "provider": { "type": "string" },
+          "id": { "type": "string" }
+        },
+        "required": ["source", "provider", "id"]
+      },
+      "secretInput": {
+        "anyOf": [{ "type": "string", "minLength": 1 }, { "$ref": "#/$defs/secretRef" }]
+      }
+    },
+    "properties": {
+      "path": { "type": "string", "minLength": 1 },
+      "secret": { "$ref": "#/$defs/secretInput" },
+      "sessionKey": { "type": "string", "minLength": 1 },
+      "summary": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": { "type": "boolean" },
+          "cron": { "type": "string", "minLength": 1 },
+          "tz": { "type": "string", "minLength": 1 },
+          "agentId": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "required": ["secret"]
+  }
+}
