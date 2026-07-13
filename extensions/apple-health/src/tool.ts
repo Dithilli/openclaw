@@ -29,7 +29,8 @@ export function createHealthQueryTool(
       "list_workouts: workouts in a date range (since/until ISO dates, optional workoutType filter).\n" +
       "summarize: aggregate workouts in a range (count, total duration/energy, breakdown by type).\n" +
       "latest: most recent workouts (use limit).\n" +
-      "metric: samples for one metricName (e.g. heart_rate, resting_heart_rate) in a range.",
+      "metric: samples for one metricName (e.g. heart_rate, resting_heart_rate) in a range.\n" +
+      "sleep: nightly sleep records (total/deep/rem/core hours, in-bed, start/end) in a range.",
     parameters: AppleHealthQuerySchema,
     async execute(_toolCallId, params) {
       const query = (params ?? {}) as AppleHealthQueryParams;
@@ -57,6 +58,10 @@ export function createHealthQueryTool(
           }
           const rows = (await store.listMetric(query.metricName, filter)).slice(-limit);
           return textResult(JSON.stringify(rows), { metric: query.metricName, points: rows });
+        }
+        case "sleep": {
+          const rows = (await store.listSleep(filter)).slice(-limit);
+          return textResult(JSON.stringify(rows), { sleep: rows });
         }
         default: {
           const rows = (await store.listWorkouts(filter)).slice(0, limit);
