@@ -13,13 +13,40 @@ recap.
 
 Apple provides no server-side API for Health data, so the data must originate on
 the iPhone. Health Auto Export runs a scheduled background job that POSTs your
-workouts and metrics as JSON to an authenticated route this plugin registers.
+workouts, metrics, and sleep as JSON to an authenticated route this plugin
+registers.
+
+## Install
+
+```
+openclaw plugins install @openclaw/apple-health
+```
+
+(or `openclaw plugins install clawhub:@openclaw/apple-health`). Then run the
+guided setup, which generates a secret and prints the exact Health Auto Export
+steps:
+
+```
+openclaw apple-health setup
+```
+
+To confirm data is landing, watch the ingest response (`{"ok":true,...}`) or ask
+your agent (e.g. "how did I sleep this week?").
 
 ## Where it runs
 
 The plugin runs inside the Gateway process. If your Gateway runs on another
 machine, the iPhone must be able to reach that host over HTTP(S). Configure the
 plugin on the Gateway host and restart the Gateway.
+
+### Exposing the endpoint to your phone
+
+The iPhone must reach your gateway's ingest URL. If the gateway isn't already
+internet-reachable, put a tunnel in front of it. **Cloudflare Tunnel** is a good
+free, always-on option; **ngrok** also works. Either way, expose the gateway's
+HTTP port and give Health Auto Export the public URL plus the `/plugins/apple-health/ingest`
+path. Keep the ingest secret private — it is the only thing protecting the
+endpoint, so restrict the tunnel to that path if your tunnel supports it.
 
 ## Configure
 

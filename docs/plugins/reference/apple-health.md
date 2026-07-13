@@ -12,7 +12,7 @@ Ingest Apple Health workouts and metrics pushed from Health Auto Export, query t
 ## Distribution
 
 - Package: `@openclaw/apple-health`
-- Install route: included in OpenClaw
+- Install route: included in OpenClaw; npm; ClawHub: `clawhub:@openclaw/apple-health`
 
 ## Surface
 

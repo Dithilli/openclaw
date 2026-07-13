@@ -1,18 +1,38 @@
 {
   "name": "@openclaw/apple-health",
   "version": "2026.6.11",
-  "private": true,
-  "description": "OpenClaw Apple Health ingestion plugin",
+  "description": "OpenClaw Apple Health ingestion plugin: receive workouts, metrics, and sleep from Health Auto Export.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Dithilli/openclaw"
+  },
   "type": "module",
   "devDependencies": {
     "@openclaw/plugin-sdk": "workspace:*"
   },
+  "dependencies": {
+    "zod": "4.4.3"
+  },
   "openclaw": {
     "extensions": [
       "./index.ts"
-    ]
-  },
-  "dependencies": {
-    "zod": "4.4.3"
+    ],
+    "install": {
+      "clawhubSpec": "clawhub:@openclaw/apple-health",
+      "npmSpec": "@openclaw/apple-health",
+      "defaultChoice": "npm",
+      "minHostVersion": ">=2026.6.11"
+    },
+    "compat": {
+      "pluginApi": ">=2026.6.11"
+    },
+    "build": {
+      "openclawVersion": "2026.6.11",
+      "bundledDist": true
+    },
+    "release": {
+      "publishToClawHub": true,
+      "publishToNpm": true
+    }
   }
 }

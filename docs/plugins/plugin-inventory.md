@@ -59,7 +59,7 @@ Each entry lists the package, distribution route, and description.
 
 - **[anthropic](/plugins/reference/anthropic)** (`@openclaw/anthropic-provider`) - included in OpenClaw. Adds Anthropic model provider support to OpenClaw.
 
-- **[apple-health](/plugins/reference/apple-health)** (`@openclaw/apple-health`) - included in OpenClaw. Ingest Apple Health workouts and metrics pushed from Health Auto Export, query them from the agent, and schedule proactive summaries.
+- **[apple-health](/plugins/reference/apple-health)** (`@openclaw/apple-health`) - included in OpenClaw; npm; ClawHub: `clawhub:@openclaw/apple-health`. Ingest Apple Health workouts and metrics pushed from Health Auto Export, query them from the agent, and schedule proactive summaries.
 
 - **[azure-speech](/plugins/reference/azure-speech)** (`@openclaw/azure-speech`) - included in OpenClaw. Azure AI Speech text-to-speech (MP3, native Ogg/Opus voice notes, PCM telephony).
 

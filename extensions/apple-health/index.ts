@@ -52,6 +52,23 @@ export default definePluginEntry({
   description:
     "Ingest Apple Health workouts and metrics from Health Auto Export, query them from the agent, and schedule proactive summaries.",
   register(api: OpenClawPluginApi) {
+    // CLI command surface (mirrors cli-metadata.ts, which declares it for
+    // lightweight parse-time discovery; this registers it for execution).
+    api.registerCli(
+      async ({ program }) => {
+        const { registerAppleHealthCli } = await import("./src/cli.js");
+        registerAppleHealthCli(program);
+      },
+      {
+        descriptors: [
+          {
+            name: "apple-health",
+            description: "Apple Health ingestion setup",
+            hasSubcommands: true,
+          },
+        ],
+      },
+    );
     registerAppleHealth(api);
   },
 });
