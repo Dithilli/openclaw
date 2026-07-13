@@ -159,7 +159,7 @@ describe("createAppleHealthIngestHandler", () => {
       res,
     );
     expect(res.statusCode).toBe(200);
-    expect(JSON.parse(res.body)).toEqual({ ok: true, workouts: 1, metrics: 0 });
+    expect(JSON.parse(res.body)).toEqual({ ok: true, workouts: 1, metrics: 0, sleep: 0 });
     expect(await store.listWorkouts({})).toHaveLength(1);
   });
 

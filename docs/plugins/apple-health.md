@@ -91,9 +91,20 @@ The plugin registers the `apple_health_query` tool:
 - `summarize` - aggregate workouts (count, total duration/energy, breakdown by type).
 - `latest` - the most recent workouts (`limit`).
 - `metric` - samples for one `metricName` (for example `heart_rate`) in a range.
+- `sleep` - nightly sleep records (total/deep/rem/core hours, in-bed, start/end) in a range.
 
-Ask the agent naturally, e.g. "how did I train this week?" and it will call the
-tool.
+Ask the agent naturally, e.g. "how did I train this week?" or "how did I sleep
+last night?" and it will call the tool.
+
+### Sleep
+
+Sleep is structured per-night data (not a scalar metric), so it is stored in its
+own `sleep` namespace and returned by the `sleep` action. To ingest it, enable
+**Sleep Analysis** in Health Auto Export. Because HAE exports one data type per
+automation, sleep needs its own automation (or include it in the metrics one if
+your app version allows) pointing at the same URL and secret. The plugin accepts
+sleep either as a `sleep_analysis` metric or a top-level `sleepAnalysis` array,
+aggregated or unaggregated.
 
 ## Proactive recap
 

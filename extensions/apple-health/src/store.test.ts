@@ -82,7 +82,7 @@ const envelope = {
 describe("createHealthStore", () => {
   it("ingests and dedupes workouts by id", async () => {
     const store = createHealthStore(fakeState());
-    expect(await store.ingest(envelope)).toEqual({ workouts: 2, metrics: 2 });
+    expect(await store.ingest(envelope)).toEqual({ workouts: 2, metrics: 2, sleep: 0 });
     await store.ingest(envelope); // re-send should not duplicate
     expect(await store.listWorkouts({})).toHaveLength(2);
   });
@@ -115,5 +115,61 @@ describe("createHealthStore", () => {
     expect(await store.listMetric("HEART_RATE", { since: "2026-07-03" })).toEqual([
       { name: "heart_rate", date: "2026-07-05 00:00:00 -0500", qty: 64, units: "count/min" },
     ]);
+  });
+
+  it("routes sleep_analysis to the sleep namespace, not metrics", async () => {
+    const store = createHealthStore(fakeState());
+    const counts = await store.ingest({
+      data: {
+        metrics: [
+          {
+            name: "sleep_analysis",
+            data: [
+              {
+                date: "2026-07-12 06:30:00 -0700",
+                totalSleep: 7.2,
+                deep: 1.1,
+                rem: 1.8,
+                core: 4.3,
+                inBed: 7.9,
+                sleepStart: "2026-07-11 22:45:00 -0700",
+                sleepEnd: "2026-07-12 06:30:00 -0700",
+              },
+            ],
+          },
+          // A scalar metric whose name merely contains "sleep" must NOT be treated as sleep.
+          {
+            name: "apple_sleeping_wrist_temperature",
+            units: "degC",
+            data: [{ date: "2026-07-12 00:00:00 -0700", qty: 35.1 }],
+          },
+        ],
+      },
+    });
+    expect(counts).toEqual({ workouts: 0, metrics: 1, sleep: 1 });
+    expect(await store.listSleep({})).toEqual([
+      {
+        date: "2026-07-12 06:30:00 -0700",
+        totalSleepHr: 7.2,
+        deepHr: 1.1,
+        remHr: 1.8,
+        coreHr: 4.3,
+        inBedHr: 7.9,
+        start: "2026-07-11 22:45:00 -0700",
+        end: "2026-07-12 06:30:00 -0700",
+      },
+    ]);
+    expect(await store.listMetric("apple_sleeping_wrist_temperature", {})).toHaveLength(1);
+  });
+
+  it("ingests sleep from a top-level sleepAnalysis array", async () => {
+    const store = createHealthStore(fakeState());
+    const counts = await store.ingest({
+      data: {
+        sleepAnalysis: [{ date: "2026-07-11 06:00:00 -0700", totalSleep: 6.5 }],
+      },
+    });
+    expect(counts.sleep).toBe(1);
+    expect((await store.listSleep({}))[0]).toMatchObject({ totalSleepHr: 6.5 });
   });
 });

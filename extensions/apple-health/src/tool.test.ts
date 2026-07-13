@@ -15,6 +15,9 @@ const fakeStore = {
   async listMetric(name: string) {
     return [{ name, date: "2026-07-05", qty: 64 }];
   },
+  async listSleep() {
+    return [{ date: "2026-07-12", totalSleepHr: 7.2, deepHr: 1.1, remHr: 1.8 }];
+  },
 } as unknown as HealthStore;
 
 describe("createHealthQueryTool", () => {
@@ -58,5 +61,13 @@ describe("createHealthQueryTool", () => {
     const tool = createHealthQueryTool(fakeStore);
     const result = await tool.execute("id", { action: "summarize" });
     expect(result.details).toMatchObject({ count: 2, totalDurationSec: 100 });
+  });
+
+  it("returns nightly records for sleep", async () => {
+    const tool = createHealthQueryTool(fakeStore);
+    const result = await tool.execute("id", { action: "sleep" });
+    expect(result.details).toEqual({
+      sleep: [{ date: "2026-07-12", totalSleepHr: 7.2, deepHr: 1.1, remHr: 1.8 }],
+    });
   });
 });

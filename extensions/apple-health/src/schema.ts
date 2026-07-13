@@ -19,6 +19,9 @@ export const healthExportEnvelopeSchema = z
       .object({
         workouts: z.array(workoutSchema).optional(),
         metrics: z.array(metricSchema).optional(),
+        // Some HAE versions deliver sleep as a top-level array instead of a
+        // metric named "sleep_analysis"; accept both (see store ingest).
+        sleepAnalysis: z.array(metricDatumSchema).optional(),
       })
       .passthrough(),
   })
@@ -43,6 +46,19 @@ export type StoredMetricPoint = {
   date: string;
   qty: number;
   units?: string;
+};
+
+/** One night of sleep persisted in the KV store, keyed by day (YYYY-MM-DD). */
+export type StoredSleep = {
+  date: string;
+  totalSleepHr?: number;
+  deepHr?: number;
+  remHr?: number;
+  coreHr?: number;
+  awakeHr?: number;
+  inBedHr?: number;
+  start?: string;
+  end?: string;
 };
 
 function asString(value: unknown): string | undefined {
@@ -126,6 +142,55 @@ export function metricPointKey(name: string, date: string): string {
   return `${name}:${date}`;
 }
 
+// Sleep arrives either as a metric named "sleep_analysis" or a top-level
+// `data.sleepAnalysis` array. Match the exact name so scalar metrics that merely
+// contain "sleep" (e.g. apple_sleeping_wrist_temperature) are NOT treated as sleep.
+export function isSleepMetricName(name: string | undefined): boolean {
+  const n = (name ?? "").toLowerCase();
+  return n === "sleep_analysis" || n === "sleepanalysis";
+}
+
+/** Per-night dedupe key: the YYYY-MM-DD day of the sleep record. */
+export function sleepDayKey(date: string): string {
+  return date.slice(0, 10);
+}
+
+/**
+ * Normalize HAE sleep records (aggregated or unaggregated) into stored nights.
+ * Permissive: keeps whatever recognized fields are present. Returns [] for
+ * points with no usable date.
+ */
+export function normalizeSleepPoints(dataPoints: unknown[] | undefined): StoredSleep[] {
+  const nights: StoredSleep[] = [];
+  for (const datum of dataPoints ?? []) {
+    if (!datum || typeof datum !== "object") {
+      continue;
+    }
+    const r = datum as Record<string, unknown>;
+    const date = asString(r.date) ?? asString(r.sleepStart) ?? asString(r.startDate);
+    if (!date) {
+      continue;
+    }
+    nights.push(
+      withOptional<StoredSleep>(
+        { date },
+        {
+          // `asleep`/`qty` are the total-asleep fallbacks when `totalSleep` is absent.
+          totalSleepHr: asNumber(r.totalSleep) ?? asNumber(r.asleep) ?? asNumber(r.qty),
+          deepHr: asNumber(r.deep),
+          remHr: asNumber(r.rem),
+          coreHr: asNumber(r.core),
+          awakeHr: asNumber(r.awake),
+          inBedHr: asNumber(r.inBed),
+          start: asString(r.sleepStart) ?? asString(r.inBedStart) ?? asString(r.startDate),
+          end: asString(r.sleepEnd) ?? asString(r.inBedEnd) ?? asString(r.endDate),
+        },
+      ),
+    );
+  }
+  return nights;
+}
+
 // Tool parameter schema. Flat JSON Schema with a string `enum` discriminator so
 // providers that reject `anyOf` still accept it (per repo tool-schema policy).
 export const AppleHealthQuerySchema = {
@@ -134,8 +199,8 @@ export const AppleHealthQuerySchema = {
     action: {
       type: "string",
       description:
-        "list_workouts=return workouts in a date range; summarize=aggregate workouts (count, total duration/energy); latest=most recent workouts; metric=return samples for one metric name.",
-      enum: ["list_workouts", "summarize", "latest", "metric"],
+        "list_workouts=return workouts in a date range; summarize=aggregate workouts (count, total duration/energy); latest=most recent workouts; metric=return samples for one metric name; sleep=return nightly sleep records (total/deep/rem/core hours) in a date range.",
+      enum: ["list_workouts", "summarize", "latest", "metric", "sleep"],
     },
     since: {
       type: "string",
@@ -162,7 +227,7 @@ export const AppleHealthQuerySchema = {
 } as const;
 
 export type AppleHealthQueryParams = {
-  action: "list_workouts" | "summarize" | "latest" | "metric";
+  action: "list_workouts" | "summarize" | "latest" | "metric" | "sleep";
   since?: string;
   until?: string;
   workoutType?: string;
