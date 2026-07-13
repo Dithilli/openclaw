@@ -155,40 +155,147 @@ export function sleepDayKey(date: string): string {
   return date.slice(0, 10);
 }
 
+// A gap in wall-clock with no recorded segment marks a separate sleep period
+// (e.g. a nap vs the main night). Within a session, Apple emits contiguous
+// segments (awake time is its own segment), so real gaps only fall between sessions.
+const SLEEP_SESSION_GAP_MS = 60 * 60 * 1000;
+
+/** Parse HAE's "YYYY-MM-DD HH:MM:SS -0700" into epoch ms (NaN if unparseable). */
+function parseHaeDateMs(value: string | undefined): number {
+  if (!value) {
+    return Number.NaN;
+  }
+  const iso = value.replace(" ", "T").replace(/\s*([+-]\d{2})(\d{2})$/u, "$1:$2");
+  return Date.parse(iso);
+}
+
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+type SleepSegment = { start: string; end?: string; stage: string; qty: number; startMs: number };
+
+/** Aggregate one contiguous session's stage segments into a stored night. */
+function sessionToNight(segments: SleepSegment[]): StoredSleep {
+  let core = 0;
+  let deep = 0;
+  let rem = 0;
+  let awake = 0;
+  let unspecified = 0;
+  for (const seg of segments) {
+    switch (seg.stage) {
+      case "core":
+        core += seg.qty;
+        break;
+      case "deep":
+        deep += seg.qty;
+        break;
+      case "rem":
+        rem += seg.qty;
+        break;
+      case "awake":
+        awake += seg.qty;
+        break;
+      case "asleep":
+      case "asleepunspecified":
+        unspecified += seg.qty;
+        break;
+      default:
+        // "inbed" and unknown stages are ignored for the asleep total.
+        break;
+    }
+  }
+  const asleep = core + deep + rem + unspecified;
+  const first = segments[0];
+  const last = segments[segments.length - 1];
+  return withOptional<StoredSleep>(
+    { date: first.start },
+    {
+      totalSleepHr: round2(asleep),
+      deepHr: deep > 0 ? round2(deep) : undefined,
+      remHr: rem > 0 ? round2(rem) : undefined,
+      coreHr: core > 0 ? round2(core) : undefined,
+      awakeHr: awake > 0 ? round2(awake) : undefined,
+      inBedHr: round2(asleep + awake),
+      start: first.start,
+      end: last.end ?? last.start,
+    },
+  );
+}
+
 /**
- * Normalize HAE sleep records (aggregated or unaggregated) into stored nights.
- * Permissive: keeps whatever recognized fields are present. Returns [] for
- * points with no usable date.
+ * Normalize HAE sleep into stored nights. Handles both real shapes:
+ * - unaggregated stage segments (Summarize OFF): each point has a stage `value`
+ *   ("Core"/"Deep"/"REM"/"Awake") and `qty` hours; grouped into sessions.
+ * - aggregated per-night objects (Summarize ON): `totalSleep`/`deep`/`rem`/...
  */
 export function normalizeSleepPoints(dataPoints: unknown[] | undefined): StoredSleep[] {
-  const nights: StoredSleep[] = [];
+  const segments: SleepSegment[] = [];
+  const aggregated: StoredSleep[] = [];
   for (const datum of dataPoints ?? []) {
     if (!datum || typeof datum !== "object") {
       continue;
     }
     const r = datum as Record<string, unknown>;
-    const date = asString(r.date) ?? asString(r.sleepStart) ?? asString(r.startDate);
-    if (!date) {
+    const stage = asString(r.value);
+    const qty = asNumber(r.qty);
+    const start = asString(r.start) ?? asString(r.startDate) ?? asString(r.date);
+    if (stage && qty !== undefined && start) {
+      segments.push({
+        start,
+        end: asString(r.end) ?? asString(r.endDate),
+        stage: stage.toLowerCase(),
+        qty,
+        startMs: parseHaeDateMs(start),
+      });
       continue;
     }
-    nights.push(
-      withOptional<StoredSleep>(
-        { date },
-        {
-          // `asleep`/`qty` are the total-asleep fallbacks when `totalSleep` is absent.
-          totalSleepHr: asNumber(r.totalSleep) ?? asNumber(r.asleep) ?? asNumber(r.qty),
-          deepHr: asNumber(r.deep),
-          remHr: asNumber(r.rem),
-          coreHr: asNumber(r.core),
-          awakeHr: asNumber(r.awake),
-          inBedHr: asNumber(r.inBed),
-          start: asString(r.sleepStart) ?? asString(r.inBedStart) ?? asString(r.startDate),
-          end: asString(r.sleepEnd) ?? asString(r.inBedEnd) ?? asString(r.endDate),
-        },
-      ),
-    );
+    // Aggregated per-night fallback.
+    const date = asString(r.date) ?? start;
+    if (date && (asNumber(r.totalSleep) !== undefined || asNumber(r.asleep) !== undefined)) {
+      aggregated.push(
+        withOptional<StoredSleep>(
+          { date },
+          {
+            totalSleepHr: asNumber(r.totalSleep) ?? asNumber(r.asleep),
+            deepHr: asNumber(r.deep),
+            remHr: asNumber(r.rem),
+            coreHr: asNumber(r.core),
+            awakeHr: asNumber(r.awake),
+            inBedHr: asNumber(r.inBed),
+            start: asString(r.sleepStart) ?? asString(r.startDate),
+            end: asString(r.sleepEnd) ?? asString(r.endDate),
+          },
+        ),
+      );
+    }
   }
-  return nights;
+
+  if (segments.length === 0) {
+    return aggregated;
+  }
+  segments.sort((a, b) => a.startMs - b.startMs || a.start.localeCompare(b.start));
+  const sessions: SleepSegment[][] = [];
+  let current: SleepSegment[] = [];
+  let prevEndMs = Number.NaN;
+  for (const seg of segments) {
+    const isNewSession =
+      current.length > 0 &&
+      Number.isFinite(seg.startMs) &&
+      Number.isFinite(prevEndMs) &&
+      seg.startMs - prevEndMs > SLEEP_SESSION_GAP_MS;
+    if (isNewSession) {
+      sessions.push(current);
+      current = [];
+    }
+    current.push(seg);
+    const endMs = parseHaeDateMs(seg.end);
+    prevEndMs = Number.isFinite(endMs) ? endMs : seg.startMs;
+  }
+  if (current.length > 0) {
+    sessions.push(current);
+  }
+  return [...aggregated, ...sessions.map(sessionToNight)];
 }
 
 // Tool parameter schema. Flat JSON Schema with a string `enum` discriminator so

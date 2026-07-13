@@ -113,11 +113,64 @@ describe("sleep helpers", () => {
     ]);
   });
 
-  it("falls back to asleep/qty for total and skips point with no date", () => {
+  it("uses asleep as the total fallback and skips points with no date", () => {
     expect(normalizeSleepPoints([{ asleep: 6.5 }])).toEqual([]);
-    expect(normalizeSleepPoints([{ date: "2026-07-11", qty: 6.5 }])).toEqual([
+    expect(normalizeSleepPoints([{ date: "2026-07-11", asleep: 6.5 }])).toEqual([
       { date: "2026-07-11", totalSleepHr: 6.5 },
     ]);
+  });
+
+  it("aggregates unaggregated stage segments into per-session nights", () => {
+    const nights = normalizeSleepPoints([
+      {
+        value: "Core",
+        qty: 0.5,
+        start: "2026-07-05 23:00:00 -0700",
+        end: "2026-07-05 23:30:00 -0700",
+      },
+      {
+        value: "Deep",
+        qty: 1,
+        start: "2026-07-05 23:30:00 -0700",
+        end: "2026-07-06 00:30:00 -0700",
+      },
+      {
+        value: "Awake",
+        qty: 0.1,
+        start: "2026-07-06 00:30:00 -0700",
+        end: "2026-07-06 00:36:00 -0700",
+      },
+      {
+        value: "REM",
+        qty: 0.4,
+        start: "2026-07-06 00:36:00 -0700",
+        end: "2026-07-06 01:00:00 -0700",
+      },
+      // ~20h gap with no segment => separate session (an evening nap)
+      {
+        value: "Core",
+        qty: 0.3,
+        start: "2026-07-06 21:00:00 -0700",
+        end: "2026-07-06 21:18:00 -0700",
+      },
+    ]);
+    expect(nights).toHaveLength(2);
+    expect(nights[0]).toEqual({
+      date: "2026-07-05 23:00:00 -0700",
+      totalSleepHr: 1.9,
+      deepHr: 1,
+      remHr: 0.4,
+      coreHr: 0.5,
+      awakeHr: 0.1,
+      inBedHr: 2,
+      start: "2026-07-05 23:00:00 -0700",
+      end: "2026-07-06 01:00:00 -0700",
+    });
+    expect(nights[1]).toMatchObject({
+      coreHr: 0.3,
+      totalSleepHr: 0.3,
+      start: "2026-07-06 21:00:00 -0700",
+    });
   });
 
   it("derives per-night day key", () => {
