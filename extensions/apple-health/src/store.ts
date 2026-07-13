@@ -6,7 +6,6 @@ import {
   normalizeMetricPoints,
   normalizeSleepPoints,
   normalizeWorkout,
-  sleepDayKey,
   type HealthExportEnvelope,
   type StoredMetricPoint,
   type StoredSleep,
@@ -109,7 +108,9 @@ export function createHealthStore(state: PluginRuntime["state"]) {
       let sleepCount = 0;
       const storeSleep = async (nights: StoredSleep[]) => {
         for (const night of nights) {
-          await sleep.register(sleepDayKey(night.date), night);
+          // Key by session start so a nap and the main night on the same day
+          // are distinct rows; re-sends of the same session dedupe.
+          await sleep.register(night.start ?? night.date, night);
           sleepCount += 1;
         }
       };
