@@ -5,6 +5,9 @@
   },
   "name": "Apple Health",
   "description": "Ingest Apple Health workouts and metrics pushed from Health Auto Export, query them from the agent, and schedule proactive summaries.",
+  "contracts": {
+    "tools": ["apple_health_query"]
+  },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
