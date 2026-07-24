@@ -207,7 +207,11 @@ function sessionToNight(segments: SleepSegment[]): StoredSleep {
   }
   const asleep = core + deep + rem + unspecified;
   const first = segments[0];
-  const last = segments[segments.length - 1];
+  const last = segments.at(-1);
+  if (!first || !last) {
+    // normalizeSleep only materializes non-empty sessions; guard narrows for indexed access.
+    throw new Error("sessionToNight requires a non-empty session");
+  }
   return withOptional<StoredSleep>(
     { date: first.start },
     {
