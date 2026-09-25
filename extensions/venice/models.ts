@@ -19,9 +19,10 @@ const VENICE_MANIFEST_PROVIDER = buildManifestModelProviderConfig({
 export const VENICE_BASE_URL = VENICE_MANIFEST_PROVIDER.baseUrl;
 const VENICE_DEFAULT_MODEL_ID = "kimi-k2-5";
 export const VENICE_DEFAULT_MODEL_REF = `venice/${VENICE_DEFAULT_MODEL_ID}`;
-const VENICE_ALLOWED_HOSTNAMES = ["api.venice.ai"];
+export const VENICE_ALLOWED_HOSTNAMES = ["api.venice.ai"];
 
-const VENICE_DEFAULT_COST = {
+// Venice publishes USD per-million-token pricing on /models; unknown models fall back to free.
+const VENICE_UNKNOWN_COST = {
   input: 0,
   output: 0,
   cacheRead: 0,
@@ -60,7 +61,7 @@ export function buildVeniceModelDefinition(entry: VeniceCatalogEntry): ModelDefi
     name: entry.name,
     reasoning: entry.reasoning,
     input: [...entry.input],
-    cost: VENICE_DEFAULT_COST,
+    cost: { ...entry.cost },
     contextWindow: entry.contextWindow,
     maxTokens: entry.maxTokens,
     compat: {
@@ -70,11 +71,18 @@ export function buildVeniceModelDefinition(entry: VeniceCatalogEntry): ModelDefi
   };
 }
 
+type VeniceModelPrice = { usd?: number };
+
 interface VeniceModelSpec {
   name: string;
   privacy: "private" | "anonymized";
   availableContextTokens?: number;
   maxCompletionTokens?: number;
+  pricing?: {
+    input?: VeniceModelPrice;
+    output?: VeniceModelPrice;
+    cache_input?: VeniceModelPrice;
+  };
   capabilities?: {
     supportsReasoning?: boolean;
     supportsVision?: boolean;
@@ -163,6 +171,21 @@ function resolveApiMaxCompletionTokens(params: {
   return Math.min(raw, contextWindow ?? fallbackContextWindow, hardCap);
 }
 
+function nonNegativeUsd(price: VeniceModelPrice | undefined): number | undefined {
+  const usd = price?.usd;
+  return typeof usd === "number" && Number.isFinite(usd) && usd >= 0 ? usd : undefined;
+}
+
+function resolveApiCost(apiModel: VeniceModel): ModelDefinitionConfig["cost"] | undefined {
+  const pricing = apiModel.model_spec?.pricing;
+  const input = nonNegativeUsd(pricing?.input);
+  const output = nonNegativeUsd(pricing?.output);
+  if (input === undefined || output === undefined) {
+    return undefined;
+  }
+  return { input, output, cacheRead: nonNegativeUsd(pricing?.cache_input) ?? 0, cacheWrite: 0 };
+}
+
 function resolveApiSupportsTools(apiModel: VeniceModel): boolean | undefined {
   const supportsFunctionCalling = apiModel.model_spec?.capabilities?.supportsFunctionCalling;
   return typeof supportsFunctionCalling === "boolean" ? supportsFunctionCalling : undefined;
@@ -217,10 +240,14 @@ export async function discoverVeniceModels(
         knownMaxTokens: catalogEntry?.maxTokens,
       });
       const apiSupportsTools = resolveApiSupportsTools(apiModel);
+      const apiCost = resolveApiCost(apiModel);
       if (catalogEntry) {
         const definition = buildVeniceModelDefinition(catalogEntry);
         if (apiMaxTokens !== undefined) {
           definition.maxTokens = apiMaxTokens;
+        }
+        if (apiCost) {
+          definition.cost = apiCost;
         }
         if (apiSupportsTools === false) {
           definition.compat = {
@@ -245,7 +272,7 @@ export async function discoverVeniceModels(
           name: apiSpec?.name || apiModel.id,
           reasoning: isReasoning,
           input: hasVision ? ["text", "image"] : ["text"],
-          cost: VENICE_DEFAULT_COST,
+          cost: apiCost ?? VENICE_UNKNOWN_COST,
           contextWindow:
             normalizePositiveInt(apiSpec?.availableContextTokens) ?? VENICE_DEFAULT_CONTEXT_WINDOW,
           maxTokens: apiMaxTokens ?? VENICE_DEFAULT_MAX_TOKENS,

@@ -196,84 +196,103 @@ provider automatically.
 
 See [Video generation](/tools/video-generation) for the full tool reference.
 
-## Built-in catalog (76 total)
+## Built-in catalog (123 total)
 
 <AccordionGroup>
-  <Accordion title="Private models (43) - fully private, no logging">
+  <Accordion title="Private models (69) - fully private, no logging">
     | Model ID | Name | Context | Features |
     | --- | --- | --- | --- |
-    | `zai-org-glm-5-2` | GLM 5.2 | 1M | Reasoning |
+    | `zai-org-glm-5-2` | GLM 5.2 | 1M | Reasoning, coding |
     | `zai-org-glm-5-1` | GLM 5.1 | 200k | Reasoning |
-    | `zai-org-glm-5` | GLM 5 | 198k | Reasoning |
-    | `olafangensan-glm-4.7-flash-heretic` | GLM 4.7 Flash Heretic | 128k | Reasoning, uncensored |
+    | `zai-org-glm-5` | GLM 5 | 198k | Reasoning, coding |
+    | `olafangensan-glm-4.7-flash-heretic` | GLM 4.7 Flash Heretic | 200k | Reasoning, uncensored |
     | `zai-org-glm-4.7-flash` | GLM 4.7 Flash | 128k | Reasoning |
-    | `zai-org-glm-4.6` | GLM 4.6 | 198k | General |
+    | `zai-org-glm-4.6` | GLM 4.6 | 198k | Reasoning |
     | `zai-org-glm-4.7` | GLM 4.7 | 198k | Reasoning |
     | `venice-uncensored-1-2` | Venice Uncensored 1.2 | 128k | Vision, uncensored |
     | `venice-uncensored-role-play` | Venice Role Play Uncensored | 128k | Vision, uncensored |
-    | `qwen3-6-27b` | Qwen 3.6 27B | 256k | Reasoning, vision |
+    | `qwen3-6-27b` | Qwen 3.6 27B | 256k | Reasoning, vision, coding |
     | `qwen3-5-9b` | Qwen 3.5 9B | 256k | Reasoning, vision |
-    | `qwen3-5-35b-a3b` | Qwen3.5 35B A3B | 256k | Reasoning, vision |
+    | `qwen3-5-35b-a3b` | Qwen3.5 35B A3B | 256k | Reasoning, vision, coding |
     | `qwen3-235b-a22b-thinking-2507` | Qwen3 235B Thinking | 128k | Reasoning |
     | `qwen3-235b-a22b-instruct-2507` | Qwen3 235B Instruct | 128k | General |
     | `qwen3-next-80b` | Qwen3 Next 80B | 256k | General |
-    | `qwen3-vl-235b-a22b` | Qwen3 VL 235B (Vision) | 256k | Vision |
+    | `qwen3-vl-235b-a22b` | Qwen3 VL 235B (Vision) | 128k | Vision |
     | `qwen3-coder-480b-a35b-instruct-turbo` | Qwen3 Coder 480B Turbo | 256k | Coding |
     | `google-gemma-4-26b-a4b-it` | Google Gemma 4 26B A4B Instruct | 256k | Reasoning, vision |
     | `google-gemma-4-31b-it` | Google Gemma 4 31B Instruct | 256k | Reasoning, vision |
     | `gemma-4-uncensored` | Gemma 4 Uncensored | 256k | Vision, uncensored |
     | `google-gemma-3-27b-it` | Google Gemma 3 27B Instruct | 198k | Vision |
-    | `arcee-trinity-large-thinking` | Trinity Large Thinking | 256k | Reasoning |
     | `grok-4-3` | Grok 4.3 | 1M | Reasoning, vision |
     | `grok-4-20` | Grok 4.20 | 2M | Reasoning, vision |
     | `grok-4-20-multi-agent` | Grok 4.20 Multi-Agent | 2M | Reasoning, vision, tools disabled |
-    | `grok-build-0-1` | Grok Build 0.1 | 256k | Reasoning, vision |
-    | `mistral-small-3-2-24b-instruct` | Mistral Small 3.2 24B Instruct | 256k | General |
-    | `mistral-small-2603` | Mistral Small 4 | 256k | Reasoning, vision |
+    | `grok-build-0-1` | Grok Build 0.1 | 256k | Reasoning, vision, coding |
+    | `mistral-small-3-2-24b-instruct` | Mistral Small 3.2 24B Instruct | 256k | Vision |
     | `hermes-3-llama-3.1-405b` | Hermes 3 Llama 3.1 405B | 128k | Tools disabled |
-    | `openai-gpt-oss-120b` | OpenAI GPT OSS 120B | 128k | General |
-    | `kimi-k2-6` | Kimi K2.6 | 256k | Reasoning, vision |
+    | `openai-gpt-oss-120b` | OpenAI GPT OSS 120B | 128k | Reasoning |
+    | `kimi-k2-6` | Kimi K2.6 | 256k | Reasoning, vision, coding |
     | `kimi-k2-7-code` | Kimi K2.7 Code | 256k | Reasoning, vision, coding |
-    | `kimi-k2-5` | Kimi K2.5 | 256k | Default, reasoning, vision |
-    | `xiaomi-mimo-v2-5` | MiMo-V2.5 | 1M | Reasoning, vision |
-    | `deepseek-v3.2` | DeepSeek V3.2 | 160k | Reasoning, tools disabled |
+    | `kimi-k2-5` | Kimi K2.5 | 256k | Default, reasoning, vision, coding |
+    | `xiaomi-mimo-v2-5` | MiMo-V2.5 | 1M | Reasoning, vision, coding |
+    | `deepseek-v4-pro` | DeepSeek V4 Pro | 1M | Reasoning, coding |
+    | `deepseek-v4-flash` | DeepSeek V4 Flash | 1M | Reasoning, coding |
+    | `deepseek-v3.2` | DeepSeek V3.2 | 160k | Reasoning |
     | `llama-3.2-3b` | Llama 3.2 3B | 128k | General |
     | `llama-3.3-70b` | Llama 3.3 70B | 128k | General |
-    | `minimax-m3-preview` | MiniMax M3 Preview | 524k | Reasoning |
-    | `minimax-m25` | MiniMax M2.5 | 198k | Reasoning |
-    | `minimax-m27` | MiniMax M2.7 | 198k | Reasoning |
+    | `minimax-m3-preview` | MiniMax M3 Preview | 524k | Reasoning, vision, coding |
+    | `minimax-m25` | MiniMax M2.5 | 198k | Reasoning, coding |
+    | `minimax-m27` | MiniMax M2.7 | 198k | Reasoning, coding |
     | `nvidia-nemotron-3-nano-30b-a3b` | NVIDIA Nemotron 3 Nano 30B | 128k | General |
     | `nvidia-nemotron-3-ultra-550b-a55b` | NVIDIA Nemotron 3 Ultra | 256k | Reasoning |
-    | `nvidia-nemotron-cascade-2-30b-a3b` | Nemotron Cascade 2 30B A3B | 256k | Reasoning |
+    | `deepseek-v4-1-flash` | DeepSeek V4.1 Flash | 1M | Reasoning, vision, coding |
+    | `deepseek-v4-flash-0731` | DeepSeek V4 Flash 0731 | 1M | Reasoning, coding |
+    | `deepseek-v4-flash-0731-fast` | DeepSeek V4 Flash 0731 Fast | 1M | Reasoning, coding |
+    | `deepseek-v4-pro-0813` | DeepSeek V4 Pro 0813 | 1M | Reasoning, coding |
+    | `e2ee-deepseek-v4-flash` | DeepSeek V4 Flash | 1M | Reasoning, coding |
+    | `e2ee-gemma-4-26b-a4b-uncensored-p` | Gemma 4 26B A4B Uncensored | 64k | Uncensored, tools disabled |
+    | `e2ee-glm-5-2-p` | GLM 5.2 | 524k | Reasoning, coding |
+    | `e2ee-glm-5-3-flash` | GLM 5.3 Flash | 1M | Reasoning, vision, coding |
+    | `e2ee-glm-5-3-p` | GLM 5.3 | 1M | Reasoning, coding |
+    | `e2ee-gpt-oss-120b-p` | GPT OSS 120B | 128k | Reasoning, tools disabled |
+    | `e2ee-kimi-k2-6` | Kimi K2.6 | 262k | Reasoning, vision, coding |
+    | `e2ee-kimi-k3-p` | Kimi K3 | 1M | Reasoning, vision, coding |
+    | `e2ee-qwen-2-5-7b-p` | Qwen 2.5 7B | 32k | Tools disabled |
+    | `e2ee-qwen3-6-35b-a3b` | Qwen 3.6 35B A3B FP8 | 32k | Reasoning, coding |
+    | `e2ee-qwen3-8-27b` | Qwen 3.8 27B | 262k | Reasoning, vision, coding |
+    | `e2ee-qwen3-vl-30b-a3b-p` | Qwen3 VL 30B A3B | 128k | Vision |
+    | `grok-4-5` | Grok 4.5 | 500k | Reasoning, vision, coding |
+    | `grok-4-6` | Grok 4.6 | 500k | Reasoning, vision, coding |
+    | `grok-4-7` | Grok 4.7 | 500k | Reasoning, vision, coding |
+    | `inkling` | Inkling | 524k | Reasoning, vision, coding |
+    | `kimi-k3` | Kimi K3 | 1M | Reasoning, vision, coding |
+    | `kimi-k3-fast-api` | Kimi K3 Fast | 1M | Reasoning, vision, coding |
+    | `qwen-3-8-2-4t-a95b` | Qwen 3.8 2.4T | 262k | Reasoning, coding |
+    | `qwen-3-8-27b` | Qwen 3.8 27B | 262k | Reasoning, vision, coding, uncensored |
+    | `qwen3-6-35b-a3b` | Qwen 3.6 35B A3B | 256k | Reasoning, vision, coding |
+    | `z-ai-glm-5-3` | GLM 5.3 | 1M | Reasoning, coding |
+    | `z-ai-glm-5-3-flash` | GLM 5.3 Flash | 1.05M | Reasoning, vision, coding |
   </Accordion>
-
-  <Accordion title="Anonymized models (33) - via Venice proxy">
+  <Accordion title="Anonymized models (54) - via Venice proxy">
     | Model ID | Name | Context | Features |
     | --- | --- | --- | --- |
-    | `z-ai-glm-5-turbo` | GLM 5 Turbo | 200k | Reasoning |
-    | `z-ai-glm-5v-turbo` | GLM 5V Turbo | 200k | Reasoning, vision |
-    | `qwen-3-7-max` | Qwen 3.7 Max | 1M | Reasoning, vision |
-    | `qwen-3-7-plus` | Qwen 3.7 Plus | 1M | Reasoning, vision |
-    | `qwen-3-6-plus` | Qwen 3.6 Plus Uncensored | 1M | Reasoning, vision, uncensored |
-    | `qwen3-5-397b-a17b` | Qwen 3.5 397B | 128k | Reasoning, vision |
+    | `z-ai-glm-5-turbo` | GLM 5 Turbo | 200k | Reasoning, coding |
+    | `z-ai-glm-5v-turbo` | GLM 5V Turbo | 200k | Reasoning, vision, coding |
+    | `qwen-3-7-max` | Qwen 3.7 Max | 1M | Reasoning, vision, coding |
+    | `qwen-3-7-plus` | Qwen 3.7 Plus | 1M | Reasoning, vision, coding |
+    | `qwen-3-6-plus` | Qwen 3.6 Plus Uncensored | 1M | Reasoning, vision, coding, uncensored |
+    | `qwen3-5-397b-a17b` | Qwen 3.5 397B | 128k | Reasoning, vision, coding |
     | `gemini-3-1-pro-preview` | Gemini 3.1 Pro (via Venice) | 1M | Reasoning, vision |
     | `gemini-3-5-flash` | Gemini 3.5 Flash | 1M | Reasoning, vision |
     | `gemini-3-flash-preview` | Gemini 3 Flash (via Venice) | 256k | Reasoning, vision |
-    | `claude-fable-5` | Claude Fable 5 | 1M | Reasoning, vision |
-    | `claude-opus-4-8` | Claude Opus 4.8 | 1M | Reasoning, vision |
-    | `claude-opus-4-8-fast` | Claude Opus 4.8 Fast | 1M | Reasoning, vision |
-    | `claude-opus-4-7` | Claude Opus 4.7 | 1M | Reasoning, vision |
-    | `claude-opus-4-7-fast` | Claude Opus 4.7 Fast | 1M | Reasoning, vision |
-    | `claude-opus-4-8` | Claude Opus 4.6 (via Venice) | 1M | Reasoning, vision |
-    | `claude-opus-4-6-fast` | Claude Opus 4.6 Fast | 1M | Reasoning, vision |
-    | `claude-opus-4-5` | Claude Opus 4.5 | 198k | Reasoning, vision |
-    | `claude-sonnet-4-6` | Claude Sonnet 4.6 (via Venice) | 1M | Reasoning, vision |
-    | `claude-sonnet-4-5` | Claude Sonnet 4.5 | 198k | Reasoning, vision |
-    | `deepseek-v4-pro` | DeepSeek V4 Pro | 1M | Reasoning |
-    | `deepseek-v4-flash` | DeepSeek V4 Flash | 1M | Reasoning |
-    | `aion-labs-aion-2-0` | Aion 2.0 | 128k | Reasoning, tools disabled |
+    | `claude-fable-5` | Claude Fable 5 | 1M | Reasoning, vision, coding |
+    | `claude-opus-4-8` | Claude Opus 4.8 | 1M | Reasoning, vision, coding |
+    | `claude-opus-4-8-fast` | Claude Opus 4.8 Fast | 1M | Reasoning, vision, coding |
+    | `claude-opus-4-7` | Claude Opus 4.7 | 1M | Reasoning, vision, coding |
+    | `claude-opus-4-6` | Claude Opus 4.6 (via Venice) | 1M | Reasoning, vision, coding |
+    | `claude-opus-4-5` | Claude Opus 4.5 | 198k | Reasoning, vision, coding |
+    | `claude-sonnet-4-6` | Claude Sonnet 4.6 (via Venice) | 1M | Reasoning, vision, coding |
+    | `claude-sonnet-4-5` | Claude Sonnet 4.5 | 198k | Reasoning, vision, coding |
     | `openai-gpt-52` | GPT-5.2 (via Venice) | 256k | Reasoning |
-    | `openai-gpt-52-codex` | GPT-5.2 Codex (via Venice) | 256k | Reasoning, vision, coding |
     | `openai-gpt-53-codex` | GPT-5.3 Codex (via Venice) | 400k | Reasoning, vision, coding |
     | `openai-gpt-54` | GPT-5.4 (via Venice) | 1M | Reasoning, vision |
     | `openai-gpt-54-pro` | GPT-5.4 Pro | 1M | Reasoning, vision |
@@ -283,6 +302,33 @@ See [Video generation](/tools/video-generation) for the full tool reference.
     | `openai-gpt-4o-2024-11-20` | GPT-4o (via Venice) | 128k | Vision |
     | `openai-gpt-4o-mini-2024-07-18` | GPT-4o Mini (via Venice) | 128k | Vision |
     | `mercury-2` | Mercury 2 | 128k | Reasoning |
+    | `aion-labs-aion-3-0` | Aion 3.0 | 128k | Reasoning, uncensored |
+    | `aion-labs-aion-3-0-mini` | Aion 3.0 Mini | 128k | Reasoning, uncensored |
+    | `aion-labs-aion-3-5` | Aion 3.5 | 262k | Reasoning, uncensored |
+    | `aion-labs-aion-3-5-mini` | Aion 3.5 Mini | 262k | Reasoning, uncensored |
+    | `claude-fable-5-1` | Claude Fable 5.1 | 1M | Reasoning, vision, coding |
+    | `claude-opus-5` | Claude Opus 5 | 1M | Reasoning, vision, coding |
+    | `claude-opus-5-5` | Claude Opus 5.5 | 1M | Reasoning, vision, coding |
+    | `claude-opus-5-fast` | Claude Opus 5 Fast | 1M | Reasoning, vision, coding |
+    | `claude-sonnet-5` | Claude Sonnet 5 | 1M | Reasoning, vision, coding |
+    | `gemini-3-5-flash-lite` | Gemini 3.5 Flash-Lite | 1M | Reasoning, vision |
+    | `gemini-3-6-flash` | Gemini 3.6 Flash | 1M | Reasoning, vision |
+    | `gemini-3-7-flash` | Gemini 3.7 Flash | 1M | Reasoning, vision |
+    | `gemini-3-8-flash` | Gemini 3.8 Flash | 1M | Reasoning, vision |
+    | `mercury-2-5` | Mercury 2.5 | 260k | Reasoning |
+    | `openai-gpt-56-luna` | GPT-5.6 Luna | 1M | Reasoning, vision |
+    | `openai-gpt-56-luna-pro` | GPT-5.6 Luna Pro | 1M | Reasoning, vision |
+    | `openai-gpt-56-sol` | GPT-5.6 Sol | 1M | Reasoning, vision |
+    | `openai-gpt-56-sol-pro` | GPT-5.6 Sol Pro | 1M | Reasoning, vision |
+    | `openai-gpt-56-terra` | GPT-5.6 Terra | 1M | Reasoning, vision |
+    | `openai-gpt-56-terra-pro` | GPT-5.6 Terra Pro | 1M | Reasoning, vision |
+    | `openai-gpt-6-astra` | GPT-6 Astra | 1.05M | Reasoning, vision |
+    | `openai-gpt-6-astra-pro` | GPT-6 Astra Pro | 1.05M | Reasoning, vision |
+    | `openai-gpt-6-luna` | GPT-6 Luna | 1.05M | Reasoning, vision |
+    | `openai-gpt-6-sol` | GPT-6 Sol | 1.05M | Reasoning, vision |
+    | `qwen-3-8-flash` | Qwen 3.8 Flash | 1M | Reasoning, vision, coding |
+    | `qwen-3-8-max` | Qwen 3.8 Max | 1M | Reasoning, vision, coding |
+    | `seed-2-1-turbo` | Seed 2.1 Turbo | 256k | Reasoning, vision, coding |
   </Accordion>
 </AccordionGroup>
 

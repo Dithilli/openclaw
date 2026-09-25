@@ -72,6 +72,7 @@ type ModelSpecOverride = {
     supportsFunctionCalling?: boolean;
   };
   includeModelSpec?: boolean;
+  pricing?: Record<string, { usd?: number; diem?: number }>;
 };
 
 function makeModelRow(params: ModelSpecOverride) {
@@ -90,6 +91,7 @@ function makeModelRow(params: ModelSpecOverride) {
         ? {}
         : { maxCompletionTokens: params.maxCompletionTokens }),
       ...(params.capabilities === undefined ? {} : { capabilities: params.capabilities }),
+      ...(params.pricing === undefined ? {} : { pricing: params.pricing }),
     },
   };
 }
@@ -125,7 +127,8 @@ describe("venice-models", () => {
     expect(def.name).toBe(entry.name);
     expect(def.reasoning).toBe(entry.reasoning);
     expect(def.input).toEqual(entry.input);
-    expect(def.cost).toEqual({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+    expect(def.cost).toEqual(entry.cost);
+    expect(def.cost.input).toBeGreaterThan(0);
     expect(def.contextWindow).toBe(entry.contextWindow);
     expect(def.maxTokens).toBe(entry.maxTokens);
   });
@@ -141,6 +144,13 @@ describe("venice-models", () => {
       "qwen3-4b",
       "qwen3-coder-480b-a35b-instruct",
       "venice-uncensored",
+      "arcee-trinity-large-thinking",
+      "mistral-small-2603",
+      "claude-opus-4-7-fast",
+      "claude-opus-4-6-fast",
+      "aion-labs-aion-2-0",
+      "openai-gpt-52-codex",
+      "nvidia-nemotron-cascade-2-30b-a3b",
     ]) {
       expect(catalogIds.has(retiredId)).toBe(false);
     }
@@ -183,6 +193,39 @@ describe("venice-models", () => {
     expect(llama?.maxTokens).toBe(2048);
   });
 
+  it("applies live Venice pricing to catalog and new models", async () => {
+    const pricing = {
+      input: { usd: 0.5, diem: 0.5 },
+      output: { usd: 2, diem: 2 },
+      cache_input: { usd: 0.1, diem: 0.1 },
+    };
+    stubVeniceModelsFetch([
+      { id: "llama-3.3-70b", pricing },
+      { id: "new-model-2026", pricing: { input: { usd: 1 }, output: { usd: 3 } } },
+      { id: "free-model-2026" },
+    ]);
+
+    const models = await runWithDiscoveryEnabled(() => discoverVeniceModels({ retryDelayMs: 0 }));
+    expect(models.find((m) => m.id === "llama-3.3-70b")?.cost).toEqual({
+      input: 0.5,
+      output: 2,
+      cacheRead: 0.1,
+      cacheWrite: 0,
+    });
+    expect(models.find((m) => m.id === "new-model-2026")?.cost).toEqual({
+      input: 1,
+      output: 3,
+      cacheRead: 0,
+      cacheWrite: 0,
+    });
+    expect(models.find((m) => m.id === "free-model-2026")?.cost).toEqual({
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+    });
+  });
+
   it("retains catalog maxTokens when the API omits maxCompletionTokens", async () => {
     stubVeniceModelsFetch([
       {
@@ -203,7 +246,7 @@ describe("venice-models", () => {
 
   it("disables tools for catalog models that do not support function calling", () => {
     const model = buildVeniceModelDefinition(
-      VENICE_MODEL_CATALOG.find((entry) => entry.id === "deepseek-v3.2")!,
+      VENICE_MODEL_CATALOG.find((entry) => entry.id === "hermes-3-llama-3.1-405b")!,
     );
     expect(model.compat?.supportsTools).toBe(false);
   });
