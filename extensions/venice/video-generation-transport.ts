@@ -109,13 +109,14 @@ function createDeadlineAbort(
 // Venice 400s carry a zod-style `issues` list naming the offending field; the
 // generic "Invalid request parameters" message hides it from the agent.
 function withVeniceIssueDetail(error: unknown): unknown {
-  const body = (error as { errorBody?: unknown } | undefined)?.errorBody;
+  const body = isRecord(error) ? error.errorBody : undefined;
   if (!(error instanceof Error) || typeof body !== "string") {
     return error;
   }
   let issues: unknown;
   try {
-    issues = (JSON.parse(body) as { issues?: unknown }).issues;
+    const parsed: unknown = JSON.parse(body);
+    issues = isRecord(parsed) ? parsed.issues : undefined;
   } catch {
     return error;
   }
