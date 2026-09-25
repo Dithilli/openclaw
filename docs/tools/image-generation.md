@@ -107,7 +107,7 @@ backend emits it.
 | MiniMax           | `image-01`                              | Yes (subject reference)            | `MINIMAX_API_KEY` or MiniMax OAuth (`minimax-portal`) |
 | OpenAI            | `gpt-image-2`                           | Yes (up to 5 images)               | `OPENAI_API_KEY` or OpenAI ChatGPT/Codex OAuth        |
 | OpenRouter        | `google/gemini-3.1-flash-image-preview` | Yes (up to 5 input images)         | `OPENROUTER_API_KEY`                                  |
-| Venice            | `venice-sd35`                           | No                                 | `VENICE_API_KEY`                                      |
+| Venice            | `venice-sd35`                           | 1 image (`/image/edit`)            | `VENICE_API_KEY`                                      |
 | Vydra             | `grok-imagine`                          | No                                 | `VYDRA_API_KEY`                                       |
 | xAI               | `grok-imagine-image`                    | Yes (up to 3 images)               | `XAI_API_KEY`                                         |
 
@@ -129,7 +129,7 @@ current session:
 | Capability            | ComfyUI            | DeepInfra | fal                                            | Google         | Microsoft Foundry | MiniMax               | OpenAI         | Venice       | Vydra | xAI            |
 | --------------------- | ------------------ | --------- | ---------------------------------------------- | -------------- | ----------------- | --------------------- | -------------- | ------------ | ----- | -------------- |
 | Generate (max count)  | 1                  | 4         | 4                                              | 4              | 1                 | 9                     | 4              | 4            | 1     | 4              |
-| Edit / reference      | 1 image (workflow) | 1 image   | Flux: 1; GPT: 10; Krea style refs: 10; NB2: 14 | Up to 5 images | 1 image           | 1 image (subject ref) | Up to 5 images | -            | -     | Up to 3 images |
+| Edit / reference      | 1 image (workflow) | 1 image   | Flux: 1; GPT: 10; Krea style refs: 10; NB2: 14 | Up to 5 images | 1 image           | 1 image (subject ref) | Up to 5 images | 1 image      | -     | Up to 3 images |
 | Size control          | -                  | ✓         | ✓                                              | ✓              | ✓                 | -                     | Up to 4K       | Up to 1280px | -     | -              |
 | Aspect ratio          | -                  | -         | ✓                                              | ✓              | -                 | ✓                     | -              | ✓            | -     | ✓              |
 | Resolution (1K/2K/4K) | -                  | -         | ✓                                              | ✓              | -                 | -                     | -              | 1K, 2K, 4K   | -     | 1K, 2K         |

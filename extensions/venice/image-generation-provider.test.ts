@@ -90,6 +90,7 @@ describe("venice image-generation provider", () => {
     const provider = buildVeniceImageGenerationProvider();
     await provider.generateImage({
       provider: "venice",
+      model: "",
       prompt: "test",
       cfg: {} as never,
       size: "2048x768",
@@ -115,9 +116,84 @@ describe("venice image-generation provider", () => {
     await expect(
       provider.generateImage({
         provider: "venice",
+        model: "",
         prompt: "test",
         cfg: {} as never,
       }),
     ).rejects.toThrow(/malformed/);
+  });
+
+  it("routes reference-image requests to /image/edit and decodes the binary reply", async () => {
+    const pngBytes = Buffer.from(PNG_BASE64, "base64");
+    fetchWithSsrFGuardMock.mockResolvedValueOnce({
+      response: new Response(pngBytes, { status: 200, headers: { "Content-Type": "image/png" } }),
+      release: vi.fn(async () => {}),
+    });
+    const provider = buildVeniceImageGenerationProvider();
+    const result = await provider.generateImage({
+      provider: "venice",
+      // Core forwards the generation default; the edit path must swap it out.
+      model: provider.defaultModel ?? "",
+      prompt: "give the fox a red scarf",
+      cfg: {} as never,
+      aspectRatio: "1:1",
+      inputImages: [{ buffer: Buffer.from("source"), mimeType: "image/png" }],
+    });
+
+    const request = lastRequest();
+    expect(request.url).toBe("https://api.venice.ai/api/v1/image/edit");
+    expect(request.auditContext).toBe("venice-image-edit");
+    const body = JSON.parse(String(request.init?.body));
+    expect(body).toEqual({
+      model: "firered-image-edit",
+      prompt: "give the fox a red scarf",
+      image: Buffer.from("source").toString("base64"),
+      output_format: "png",
+      safe_mode: false,
+      aspect_ratio: "1:1",
+    });
+    expect(result.model).toBe("firered-image-edit");
+    expect(result.images).toEqual([
+      { buffer: pngBytes, mimeType: "image/png", fileName: "image-1.png" },
+    ]);
+  });
+
+  it("routes a configured generation model to the edit default when editing", async () => {
+    fetchWithSsrFGuardMock.mockResolvedValueOnce({
+      response: new Response(Buffer.from(PNG_BASE64, "base64"), {
+        status: 200,
+        headers: { "Content-Type": "image/png" },
+      }),
+      release: vi.fn(async () => {}),
+    });
+    const provider = buildVeniceImageGenerationProvider();
+    await provider.generateImage({
+      provider: "venice",
+      model: "lustify-v8",
+      prompt: "test",
+      cfg: {} as never,
+      inputImages: [{ buffer: Buffer.from("source"), mimeType: "image/png" }],
+    });
+    expect(JSON.parse(String(lastRequest().init?.body)).model).toBe("firered-image-edit");
+  });
+
+  it("keeps an explicit edit model when editing", async () => {
+    fetchWithSsrFGuardMock.mockResolvedValueOnce({
+      response: new Response(Buffer.from(PNG_BASE64, "base64"), {
+        status: 200,
+        headers: { "Content-Type": "image/png" },
+      }),
+      release: vi.fn(async () => {}),
+    });
+    const provider = buildVeniceImageGenerationProvider();
+    await provider.generateImage({
+      provider: "venice",
+      model: "qwen-edit-uncensored",
+      prompt: "test",
+      cfg: {} as never,
+      inputImages: [{ buffer: Buffer.from("source"), mimeType: "image/png" }],
+    });
+    expect(JSON.parse(String(lastRequest().init?.body)).model).toBe("qwen-edit-uncensored");
+    expect(provider.capabilities.edit).toMatchObject({ enabled: true, maxInputImages: 1 });
   });
 });

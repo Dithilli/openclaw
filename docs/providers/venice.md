@@ -152,7 +152,10 @@ configuration is needed.
   anything you omit.
 - **Uncensored by default**: Venice's `safe_mode` is disabled for this provider
   so uncensored image models behave as intended.
-- **Text-to-image only**: image editing is not wired through this provider.
+- **Editing**: pass one reference image and OpenClaw calls Venice's
+  `/image/edit` endpoint. The default edit model is `firered-image-edit`;
+  override with any Venice `*-edit` model such as `qwen-edit-uncensored`,
+  `seedream-v5-lite-edit`, or `nano-banana-pro-edit`.
 
 List the registered image providers and models at runtime with the tool's
 `list` action:
@@ -162,6 +165,36 @@ List the registered image providers and models at runtime with the tool's
 ```
 
 See [Image generation](/tools/image-generation) for the full tool reference.
+
+## Video generation
+
+Venice video models are available through the `video_generate` tool. Once
+`VENICE_API_KEY` is set, OpenClaw registers Venice as a video-generation
+provider automatically.
+
+- **Default model**: `wan-3-0-text-to-video` for text prompts. When you attach
+  an image and leave `model` unset, OpenClaw switches to the
+  `wan-3-0-image-to-video` sibling. Venice encodes the input mode in the model
+  id (`*-text-to-video`, `*-image-to-video`, `*-reference-to-video`,
+  `*-video-to-video`), so pick the id that matches your inputs when overriding.
+- **Inputs**: a plain or `first_frame` image becomes the start frame, a
+  `last_frame` image becomes the end frame, and `reference_image` images are
+  sent as references (up to 30 on reference-to-video models). Video and audio
+  references map to Venice's `video_url`, `reference_video_urls`, `audio_url`,
+  and `reference_audio_urls`.
+- **Controls**: `durationSeconds` (sent as Venice's `Ns` string, default 5s),
+  `aspectRatio`, `resolution`, and `audio`. Per-model limits come from Venice's
+  live `/models?type=video` constraints, so unsupported values are normalized
+  or rejected before the job is queued.
+- **Flow**: OpenClaw asks `/video/quote` for a price, queues on `/video/queue`,
+  polls `/video/retrieve` until the mp4 is ready, and deletes the media from
+  Venice once downloaded. The USD quote is returned in the result metadata as
+  `quoteUsd`.
+- **Consent-gated models**: some Seedance models require Venice's one-time
+  consent flow; Venice answers `409` until you accept it in your Venice
+  account. Pick another model or complete the consent there.
+
+See [Video generation](/tools/video-generation) for the full tool reference.
 
 ## Built-in catalog (76 total)
 

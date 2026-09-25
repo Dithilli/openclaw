@@ -10,6 +10,7 @@ import { applyVeniceConfig, VENICE_DEFAULT_MODEL_REF } from "./onboard.js";
 import { buildVeniceProvider } from "./provider-catalog.js";
 import { createVeniceDeepSeekV4Wrapper } from "./stream.js";
 import { fetchVeniceUsage } from "./usage.js";
+import { buildVeniceVideoGenerationProvider } from "./video-generation-provider.js";
 
 const PROVIDER_ID = "venice";
 const XAI_UNSUPPORTED_SCHEMA_KEYWORDS = [
@@ -83,5 +84,6 @@ export default defineSingleProviderPluginEntry({
   },
   register(api) {
     api.registerImageGenerationProvider(buildVeniceImageGenerationProvider());
+    api.registerVideoGenerationProvider(buildVeniceVideoGenerationProvider());
   },
 });
