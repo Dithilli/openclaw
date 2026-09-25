@@ -185,7 +185,9 @@ provider automatically.
 - **Controls**: `durationSeconds` (sent as Venice's `Ns` string, default 5s),
   `aspectRatio`, `resolution`, and `audio`. Per-model limits come from Venice's
   live `/models?type=video` constraints, so unsupported values are normalized
-  or rejected before the job is queued.
+  or rejected before the job is queued. Venice requires an aspect ratio on most
+  models and prices an omitted resolution at its top tier, so when you leave
+  them out OpenClaw sends the model's first listed ratio and its cheapest tier.
 - **Flow**: OpenClaw asks `/video/quote` for a price, queues on `/video/queue`,
   polls `/video/retrieve` until the mp4 is ready, and deletes the media from
   Venice once downloaded. The USD quote is returned in the result metadata as

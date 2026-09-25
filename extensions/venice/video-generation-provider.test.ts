@@ -208,6 +208,44 @@ describe("venice video generation provider", () => {
     expect(fetchGuardMock).toHaveBeenCalledTimes(4);
   });
 
+  it("fills the required aspect ratio and the cheapest resolution from live constraints", async () => {
+    stubLiveVideoCatalog([
+      liveVideoRow("wan-3-0-text-to-video", {
+        model_type: "text-to-video",
+        aspect_ratios: ["16:9", "9:16", "1:1"],
+        resolutions: ["1080p", "720p", "480p"],
+        durations: ["2s", "5s"],
+        audio_configurable: true,
+        audio_input: false,
+        video_input: false,
+      }),
+    ]);
+    fetchGuardMock
+      .mockResolvedValueOnce(releasedJson({ quote: 0.1 }))
+      .mockResolvedValueOnce(releasedJson({ queue_id: "q-defaults" }))
+      .mockResolvedValueOnce(releasedVideo("bytes"))
+      .mockResolvedValueOnce(releasedJson({ success: true }));
+    const provider = buildVeniceVideoGenerationProvider();
+    await provider.generateVideo({ ...BASE_REQUEST, durationSeconds: 2 });
+    expect(guardCall(1).body).toMatchObject({ aspect_ratio: "16:9", resolution: "480p" });
+  });
+
+  it("names the rejected field from Venice's 400 issues list", async () => {
+    fetchGuardMock.mockResolvedValueOnce(releasedJson({ quote: 0.1 })).mockResolvedValueOnce(
+      released(
+        new Response(
+          JSON.stringify({
+            error: "Invalid request parameters",
+            issues: [{ path: ["aspect_ratio"], message: "Required" }],
+          }),
+          { status: 400, headers: { "content-type": "application/json" } },
+        ),
+      ),
+    );
+    const provider = buildVeniceVideoGenerationProvider();
+    await expect(provider.generateVideo(BASE_REQUEST)).rejects.toThrow(/aspect_ratio: Required/);
+  });
+
   it("skips the quote for jobs with video inputs instead of reporting the no-reference tier", async () => {
     fetchGuardMock
       .mockResolvedValueOnce(releasedJson({ queue_id: "q-9" }))
