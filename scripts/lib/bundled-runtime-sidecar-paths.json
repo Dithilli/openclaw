@@ -1,5 +1,6 @@
 [
   "dist/extensions/a2a/runtime-api.js",
+  "dist/extensions/apple-health/runtime-api.js",
   "dist/extensions/browser/runtime-api.js",
   "dist/extensions/canvas/runtime-api.js",
   "dist/extensions/copilot-proxy/runtime-api.js",

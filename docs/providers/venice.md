@@ -88,6 +88,32 @@ You can also run `openclaw configure` and pick **Model/auth provider > Venice AI
 | Uncensored             | `venice-uncensored-1-2`                      | Current uncensored Venice model        |
 </Tip>
 
+## Image generation
+
+Venice image models are available through the `image_generate` tool — the same
+tool used for every other image provider. Once `VENICE_API_KEY` is set, OpenClaw
+registers Venice as an image-generation provider automatically; no extra
+configuration is needed.
+
+- **Default model**: `venice-sd35`. Override with any Venice image model, for
+  example `flux-2-pro`, `seedream-v5-lite`, `nano-banana-pro`, or the uncensored
+  `lustify-v8`.
+- **Geometry**: pass `size` (width/height up to 1280px), `aspectRatio`, or
+  `resolution` (`1K`/`2K`/`4K`) — Venice applies each model's own defaults for
+  anything you omit.
+- **Uncensored by default**: Venice's `safe_mode` is disabled for this provider
+  so uncensored image models behave as intended.
+- **Text-to-image only**: image editing is not wired through this provider.
+
+List the registered image providers and models at runtime with the tool's
+`list` action:
+
+```text
+/tool image_generate action=list
+```
+
+See [Image generation](/tools/image-generation) for the full tool reference.
+
 ## Built-in catalog (16 visible models)
 
 <AccordionGroup>

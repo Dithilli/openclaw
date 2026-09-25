@@ -5,6 +5,7 @@ import {
   type ModelCompatConfig,
 } from "openclaw/plugin-sdk/provider-model-shared";
 import { normalizeLowercaseStringOrEmpty } from "openclaw/plugin-sdk/string-coerce-runtime";
+import { buildVeniceImageGenerationProvider } from "./image-generation-provider.js";
 import { VENICE_MODEL_DISCOVERY_OPTIONS } from "./models.js";
 import { applyVeniceConfig } from "./onboard.js";
 import manifest from "./openclaw.plugin.json" with { type: "json" };
@@ -71,5 +72,8 @@ export default defineSingleProviderPluginEntry({
         timeoutMs: ctx.timeoutMs,
         fetchFn: ctx.fetchFn,
       }),
+  },
+  register(api) {
+    api.registerImageGenerationProvider(buildVeniceImageGenerationProvider());
   },
 });
