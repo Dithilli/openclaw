@@ -8,11 +8,15 @@ import type {
 } from "openclaw/plugin-sdk/image-generation";
 import {
   generatedImageAssetFromBase64,
+  resolveInlineImageJsonResponseMaxBytes,
   sniffImageMimeType,
 } from "openclaw/plugin-sdk/image-generation";
 import { isProviderApiKeyConfigured } from "openclaw/plugin-sdk/provider-auth";
 import { resolveApiKeyForProvider } from "openclaw/plugin-sdk/provider-auth-runtime";
-import { assertOkOrThrowHttpError } from "openclaw/plugin-sdk/provider-http";
+import {
+  assertOkOrThrowHttpError,
+  readProviderJsonResponse,
+} from "openclaw/plugin-sdk/provider-http";
 import { readResponseWithLimit } from "openclaw/plugin-sdk/response-limit-runtime";
 import { fetchWithSsrFGuard } from "openclaw/plugin-sdk/ssrf-runtime";
 import { isRecord } from "openclaw/plugin-sdk/string-coerce-runtime";
@@ -25,6 +29,14 @@ const DEFAULT_VENICE_IMAGE_MODEL = "venice-sd35";
 // (`*-edit`), so a generation model id cannot be reused for an edit request.
 const DEFAULT_VENICE_EDIT_MODEL = "firered-image-edit";
 const VENICE_EDIT_MAX_BYTES = 32 * 1024 * 1024;
+
+// Configured per-image cap; 0 lets the SDK fall back to its default image maximum.
+function configuredImageMaxBytes(cfg: ImageGenerationRequest["cfg"]): number {
+  const configured = cfg?.agents?.defaults?.mediaMaxMb;
+  return typeof configured === "number" && Number.isFinite(configured) && configured > 0
+    ? Math.floor(configured * 1024 * 1024)
+    : 0;
+}
 const DEFAULT_OUTPUT_FORMAT: ImageGenerationOutputFormat = "png";
 // Venice caps pixel-addressed models at 1280px per edge.
 const VENICE_MAX_EDGE = 1280;
@@ -379,7 +391,16 @@ export function buildVeniceImageGenerationProvider(): ImageGenerationProvider {
       });
       try {
         await assertOkOrThrowHttpError(response, "venice image generation failed");
-        const base64Images = parseVeniceImageResponse(await response.json());
+        // Bound the inline base64 payload by the requested count and image cap so
+        // an oversized response cannot be buffered before media limits apply.
+        const base64Images = parseVeniceImageResponse(
+          await readProviderJsonResponse(response, "venice image generation", {
+            maxBytes: resolveInlineImageJsonResponseMaxBytes(
+              Math.max(1, Math.min(4, req.count ?? 1)),
+              configuredImageMaxBytes(req.cfg),
+            ),
+          }),
+        );
         const images: GeneratedImageAsset[] = [];
         base64Images.forEach((base64, index) => {
           const asset = generatedImageAssetFromBase64({

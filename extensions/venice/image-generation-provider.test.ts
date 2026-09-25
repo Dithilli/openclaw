@@ -258,6 +258,27 @@ describe("venice image-generation provider", () => {
     expect(JSON.parse(String(lastRequest().init?.body)).aspect_ratio).toBe("16:9");
   });
 
+  it("rejects an oversized image response before decoding it", async () => {
+    fetchWithSsrFGuardMock.mockResolvedValueOnce({
+      // The bounded reader allows a 1 MiB JSON envelope on top of the image cap.
+      response: new Response(JSON.stringify({ images: ["A".repeat(2 * 1024 * 1024)] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+      release: vi.fn(async () => {}),
+    });
+    const provider = buildVeniceImageGenerationProvider();
+    await expect(
+      provider.generateImage({
+        provider: "venice",
+        model: "",
+        prompt: "test",
+        // 1 KiB image cap => a 2 MiB inline payload must be refused.
+        cfg: { agents: { defaults: { mediaMaxMb: 1 / 1024 } } } as never,
+      }),
+    ).rejects.toThrow(/exceed|too large|limit/i);
+  });
+
   it("throws on a malformed response", async () => {
     fetchWithSsrFGuardMock.mockResolvedValueOnce({
       response: new Response(JSON.stringify({ images: "nope" }), {
