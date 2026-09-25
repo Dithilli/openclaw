@@ -4,11 +4,13 @@ import { extensionForMime } from "openclaw/plugin-sdk/media-mime";
 import { resolvePositiveTimerTimeoutMs } from "openclaw/plugin-sdk/number-runtime";
 import { isProviderApiKeyConfigured } from "openclaw/plugin-sdk/provider-auth";
 import { resolveApiKeyForProvider } from "openclaw/plugin-sdk/provider-auth-runtime";
-import { getCachedLiveProviderModelRows } from "openclaw/plugin-sdk/provider-catalog-live-runtime";
 import {
   assertOkOrThrowHttpError,
   createProviderOperationDeadline,
+  executeProviderOperationWithRetry,
   type ProviderOperationDeadline,
+  type ProviderOperationRetryStage,
+  type TransientProviderRetryConfig,
   readProviderJsonResponse,
   resolveProviderOperationTimeoutMs,
   waitProviderOperationPollInterval,
@@ -25,7 +27,7 @@ import type {
   VideoGenerationResolution,
   VideoGenerationSourceAsset,
 } from "openclaw/plugin-sdk/video-generation";
-import { VENICE_ALLOWED_HOSTNAMES, VENICE_BASE_URL } from "./models.js";
+import { fetchVeniceLiveModelSpec, VENICE_ALLOWED_HOSTNAMES, VENICE_BASE_URL } from "./models.js";
 
 const PROVIDER_ID = "venice";
 // Venice encodes the input mode in the model id. The text/image pair below is
@@ -36,12 +38,10 @@ const DEFAULT_IMAGE_TO_VIDEO_MODEL = "wan-3-0-image-to-video";
 const DEFAULT_DURATION_SECONDS = 5;
 const DEFAULT_HTTP_TIMEOUT_MS = 30_000;
 const DEFAULT_OPERATION_TIMEOUT_MS = 1_200_000;
-const DEFAULT_GENERATED_VIDEO_MAX_BYTES = 16 * 1024 * 1024;
 const POLL_INTERVAL_MS = 5_000;
-const LIVE_CATALOG_TIMEOUT_MS = 10_000;
-// Video constraints change when Venice adds models, not per request; cache
-// them well past the text catalog's 60s so polling loops never refetch.
-const LIVE_CATALOG_TTL_MS = 10 * 60 * 1000;
+// Retrieve polls run for minutes behind Venice's edge; ride out short 5xx
+// blips instead of losing a paid job on the SDK's single default retry.
+const POLL_RETRY = { attempts: 4, baseDelayMs: 1_000, maxDelayMs: 5_000 };
 const VENICE_VIDEO_MALFORMED_RESPONSE = "venice video generation response malformed";
 
 // Advisory list for `video_generate action=list`; any live Venice video model id is accepted.
@@ -73,8 +73,16 @@ type VeniceVideoConstraints = {
 
 let veniceVideoFetchGuard = fetchWithSsrFGuard;
 
-export function setVeniceVideoFetchGuardForTesting(impl: typeof fetchWithSsrFGuard | null): void {
+function setVeniceVideoFetchGuardForTesting(impl: typeof fetchWithSsrFGuard | null): void {
   veniceVideoFetchGuard = impl ?? fetchWithSsrFGuard;
+}
+
+// Test seam published through ./test-support.ts so production keeps no test-only exports.
+if (process.env.VITEST === "true") {
+  const key = Symbol.for("openclaw.veniceTestApi");
+  // SAFETY: only this plugin's seam blocks write this global, always as a plain record of setters.
+  const api = (Reflect.get(globalThis, key) as Record<string, unknown> | undefined) ?? {};
+  Reflect.set(globalThis, key, { ...api, setVideoFetchGuard: setVeniceVideoFetchGuardForTesting });
 }
 
 function parseDurationSeconds(value: unknown): number | undefined {
@@ -96,11 +104,11 @@ function toCoreResolution(value: string): VideoGenerationResolution {
   return value.toUpperCase();
 }
 
-function readVeniceVideoConstraints(row: unknown): VeniceVideoConstraints | undefined {
-  if (!isRecord(row) || !isRecord(row.model_spec) || !isRecord(row.model_spec.constraints)) {
+function readVeniceVideoConstraints(spec: unknown): VeniceVideoConstraints | undefined {
+  if (!isRecord(spec) || !isRecord(spec.constraints)) {
     return undefined;
   }
-  const constraints = row.model_spec.constraints;
+  const constraints = spec.constraints;
   const modelType = normalizeOptionalString(constraints.model_type);
   if (modelType !== "text-to-video" && modelType !== "image-to-video" && modelType !== "video") {
     return undefined;
@@ -122,17 +130,33 @@ function readVeniceVideoConstraints(row: unknown): VeniceVideoConstraints | unde
 async function fetchVeniceVideoConstraints(
   model: string,
 ): Promise<VeniceVideoConstraints | undefined> {
-  const rows = await getCachedLiveProviderModelRows({
-    providerId: PROVIDER_ID,
-    endpoint: `${VENICE_BASE_URL}/models?type=video`,
-    timeoutMs: LIVE_CATALOG_TIMEOUT_MS,
-    ttlMs: LIVE_CATALOG_TTL_MS,
-    policy: { allowedHostnames: VENICE_ALLOWED_HOSTNAMES },
-    auditContext: "venice-video-model-discovery",
-    shouldCacheRows: (candidate) => candidate.length > 0,
-  });
-  const row = rows.find((entry) => isRecord(entry) && entry.id === model);
-  return row ? readVeniceVideoConstraints(row) : undefined;
+  return readVeniceVideoConstraints(await fetchVeniceLiveModelSpec("video", model));
+}
+
+// Core always lists `generate` as a supported mode, so a text-only request
+// against an image- or video-only Venice model must be rejected here, before
+// it is queued and billed.
+function assertVeniceVideoInputs(
+  model: string,
+  constraints: VeniceVideoConstraints | undefined,
+  req: VideoGenerationRequest,
+): void {
+  if (!constraints) {
+    return;
+  }
+  const imageCount = req.inputImages?.length ?? 0;
+  const videoCount = req.inputVideos?.length ?? 0;
+  // Reference models report `image-to-video` but may also take videos alone.
+  const videoOnlyAccepted = constraints.videoInput && videoCount > 0;
+  if (constraints.modelType === "image-to-video" && imageCount === 0 && !videoOnlyAccepted) {
+    throw new Error(`venice model ${model} requires an image input`);
+  }
+  if (constraints.modelType === "video" && videoCount === 0) {
+    throw new Error(`venice model ${model} requires a video input`);
+  }
+  if (constraints.modelType === "text-to-video" && imageCount + videoCount > 0) {
+    throw new Error(`venice model ${model} accepts a text prompt only`);
+  }
 }
 
 function modeCapabilitiesFromConstraints(
@@ -153,7 +177,7 @@ function modeCapabilitiesFromConstraints(
   };
 }
 
-export function capabilitiesFromVeniceVideoConstraints(
+function capabilitiesFromVeniceVideoConstraints(
   model: string,
   constraints: VeniceVideoConstraints,
 ): VideoGenerationProviderCapabilities {
@@ -169,15 +193,16 @@ export function capabilitiesFromVeniceVideoConstraints(
     imageToVideo: {
       ...mode,
       enabled: acceptsImages,
-      // Reference models take up to 30 `reference_image_urls`; image-to-video
-      // models take one `image_url` plus an optional `end_image_url`.
+      // Reference models take up to 30 `reference_image_urls` (the cap in
+      // Venice's /video/queue schema; live constraints publish no per-model
+      // counts); image-to-video models take `image_url` plus optional `end_image_url`.
       maxInputImages: acceptsImages ? (isReferenceModel ? 30 : 2) : 0,
     },
     videoToVideo: {
       ...mode,
       enabled: constraints.videoInput,
-      // `video_url` plus up to 10 `reference_video_urls`; reference models may
-      // also mix images in, which core routes through videoToVideo.
+      // `video_url` plus up to 10 `reference_video_urls` (Venice's schema cap);
+      // reference models may also mix images in, which core routes through videoToVideo.
       maxInputVideos: constraints.videoInput ? (isReferenceModel ? 10 : 1) : 0,
       maxInputImages: isReferenceModel ? 30 : 0,
     },
@@ -265,7 +290,7 @@ function applyMediaInputs(
   }
 }
 
-export function buildVeniceVideoRequestBody(
+function buildVeniceVideoRequestBody(
   req: VideoGenerationRequest,
   model: string,
 ): Record<string, unknown> {
@@ -312,12 +337,44 @@ export function buildVeniceVideoRequestBody(
   return body;
 }
 
-function resolveGeneratedVideoMaxBytes(req: VideoGenerationRequest): number {
-  const configured = req.cfg.agents?.defaults?.mediaMaxMb;
-  if (typeof configured === "number" && Number.isFinite(configured) && configured > 0) {
-    return Math.floor(configured * 1024 * 1024);
+const DEFAULT_GENERATED_VIDEO_MAX_BYTES = 16 * 1024 * 1024;
+
+function resolveGeneratedMediaMaxBytes(cfg: VideoGenerationRequest["cfg"], _kind: "video"): number {
+  const configured = cfg?.agents?.defaults?.mediaMaxMb;
+  return typeof configured === "number" && Number.isFinite(configured) && configured > 0
+    ? Math.floor(configured * 1024 * 1024)
+    : DEFAULT_GENERATED_VIDEO_MAX_BYTES;
+}
+
+// Reads the video body under the byte cap; an oversized private result is
+// delivered by its URL instead so the caller can still fetch it.
+async function readGeneratedVideoAsset(
+  response: Response,
+  params: {
+    label: string;
+    maxBytes: number;
+    overflowUrl?: string;
+    validateBinaryResponse?: boolean;
+  },
+): Promise<GeneratedVideoAsset> {
+  const mimeType =
+    normalizeOptionalString(response.headers.get("content-type")?.split(";")[0]) ?? "video/mp4";
+  const fileName = `video-1.${extensionForMime(mimeType)?.replace(/^\./u, "") ?? "mp4"}`;
+  let exceededMaxBytes = false;
+  try {
+    const buffer = await readResponseWithLimit(response, params.maxBytes, {
+      onOverflow: ({ maxBytes }) => {
+        exceededMaxBytes = true;
+        return new Error(`${params.label} exceeds ${maxBytes} bytes`);
+      },
+    });
+    return { buffer, mimeType, fileName };
+  } catch (error) {
+    if (exceededMaxBytes && params.overflowUrl) {
+      return { url: params.overflowUrl, mimeType, fileName };
+    }
+    throw error;
   }
-  return DEFAULT_GENERATED_VIDEO_MAX_BYTES;
 }
 
 type VeniceVideoHttp = {
@@ -325,21 +382,97 @@ type VeniceVideoHttp = {
   deadline: ProviderOperationDeadline;
 };
 
-async function postVeniceJson(
-  path: string,
-  body: Record<string, unknown>,
-  http: VeniceVideoHttp,
-  auditContext: string,
-) {
-  return await veniceVideoFetchGuard({
-    url: `${VENICE_BASE_URL}${path}`,
-    init: { method: "POST", headers: http.headers, body: JSON.stringify(body) },
-    timeoutMs: resolveProviderOperationTimeoutMs({
-      deadline: http.deadline,
+// Every Venice call runs under the SDK transient-retry policy for its stage;
+// a single 502 from Venice's edge during a multi-minute poll must not lose the job.
+async function fetchVeniceVideo(params: {
+  url: string;
+  init?: RequestInit;
+  http: VeniceVideoHttp;
+  stage: ProviderOperationRetryStage;
+  retry?: TransientProviderRetryConfig;
+  auditContext: string;
+  errorContext: string;
+  allowedHostnames?: string[];
+}) {
+  const resolveTimeoutMs = () =>
+    resolveProviderOperationTimeoutMs({
+      deadline: params.http.deadline,
       defaultTimeoutMs: DEFAULT_HTTP_TIMEOUT_MS,
-    }),
-    policy: { allowedHostnames: VENICE_ALLOWED_HOSTNAMES },
-    auditContext,
+    });
+  // Deadline exhaustion is checked before entering the retry loop: the helper
+  // treats timeout-shaped errors as transient, so an expired deadline raised
+  // inside it would be retried instead of ending the operation.
+  resolveTimeoutMs();
+  // The retry sleeps are bounded by the same deadline through this signal, and
+  // each attempt re-derives its request timeout from the remaining time.
+  const deadlineAbort = createDeadlineAbort(params.http.deadline);
+  try {
+    return await executeProviderOperationWithRetry({
+      provider: PROVIDER_ID,
+      stage: params.stage,
+      retry: params.retry,
+      signal: deadlineAbort?.signal,
+      operation: async () => {
+        const result = await veniceVideoFetchGuard({
+          url: params.url,
+          init: params.init,
+          timeoutMs: resolveTimeoutMs(),
+          ...(params.allowedHostnames
+            ? { policy: { allowedHostnames: params.allowedHostnames } }
+            : {}),
+          auditContext: params.auditContext,
+        });
+        try {
+          await assertOkOrThrowHttpError(result.response, params.errorContext);
+        } catch (error) {
+          await result.release();
+          throw error;
+        }
+        return result;
+      },
+    });
+  } finally {
+    deadlineAbort?.dispose();
+  }
+}
+
+function createDeadlineAbort(
+  deadline: ProviderOperationDeadline,
+): { signal: AbortSignal; dispose: () => void } | undefined {
+  if (typeof deadline.deadlineAtMs !== "number") {
+    return undefined;
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () => controller.abort(new Error(`${deadline.label} timed out`)),
+    Math.max(1, deadline.deadlineAtMs - Date.now()),
+  );
+  timer.unref?.();
+  return { signal: controller.signal, dispose: () => clearTimeout(timer) };
+}
+
+async function postVeniceJson(params: {
+  path: string;
+  body: Record<string, unknown>;
+  http: VeniceVideoHttp;
+  stage: ProviderOperationRetryStage;
+  retry?: TransientProviderRetryConfig;
+  auditContext: string;
+  errorContext: string;
+}) {
+  return await fetchVeniceVideo({
+    url: `${VENICE_BASE_URL}${params.path}`,
+    init: {
+      method: "POST",
+      headers: params.http.headers,
+      body: JSON.stringify(params.body),
+    },
+    http: params.http,
+    stage: params.stage,
+    retry: params.retry,
+    auditContext: params.auditContext,
+    errorContext: params.errorContext,
+    allowedHostnames: VENICE_ALLOWED_HOSTNAMES,
   });
 }
 
@@ -359,6 +492,12 @@ async function quoteVeniceVideo(
   body: Record<string, unknown>,
   http: VeniceVideoHttp,
 ): Promise<number | undefined> {
+  // Venice prices input-video jobs from `reference_video_total_duration`,
+  // which needs the media probed; without it the quote is the cheaper
+  // no-reference tier, so report nothing rather than a misleading number.
+  if (body.video_url !== undefined || body.reference_video_urls !== undefined) {
+    return undefined;
+  }
   const quoteBody: Record<string, unknown> = { model: body.model, duration: body.duration };
   for (const key of ["aspect_ratio", "resolution", "audio"]) {
     if (body[key] !== undefined) {
@@ -366,17 +505,15 @@ async function quoteVeniceVideo(
     }
   }
   try {
-    const { response, release } = await postVeniceJson(
-      "/video/quote",
-      quoteBody,
+    const { response, release } = await postVeniceJson({
+      path: "/video/quote",
+      body: quoteBody,
       http,
-      "venice-video-quote",
-    );
+      stage: "create",
+      auditContext: "venice-video-quote",
+      errorContext: "venice video quote failed",
+    });
     try {
-      if (!response.ok) {
-        await response.body?.cancel().catch(() => undefined);
-        return undefined;
-      }
       const payload = await readVeniceJson(response, "venice video quote failed");
       return isRecord(payload) && typeof payload.quote === "number" ? payload.quote : undefined;
     } finally {
@@ -391,14 +528,17 @@ async function queueVeniceVideo(
   body: Record<string, unknown>,
   http: VeniceVideoHttp,
 ): Promise<{ queueId: string; downloadUrl?: string }> {
-  const { response, release } = await postVeniceJson(
-    "/video/queue",
+  const { response, release } = await postVeniceJson({
+    path: "/video/queue",
     body,
     http,
-    "venice-video-queue",
-  );
+    // Queueing bills a job and has no idempotency token; the SDK runs the
+    // `create` stage exactly once, so a lost response can never queue twice.
+    stage: "create",
+    auditContext: "venice-video-queue",
+    errorContext: "venice video generation failed",
+  });
   try {
-    await assertOkOrThrowHttpError(response, "venice video generation failed");
     const payload = await readVeniceJson(response, "venice video queue failed");
     const queueId = isRecord(payload) ? normalizeOptionalString(payload.queue_id) : undefined;
     if (!queueId) {
@@ -413,18 +553,12 @@ async function queueVeniceVideo(
   }
 }
 
-function responseMimeType(response: Response): string {
+function isVideoResponse(response: Response): boolean {
   return (
-    normalizeOptionalString(response.headers.get("content-type")?.split(";")[0]) ?? "video/mp4"
+    normalizeOptionalString(response.headers.get("content-type")?.split(";")[0])?.startsWith(
+      "video/",
+    ) === true
   );
-}
-
-async function readVideoBytes(response: Response, maxBytes: number): Promise<GeneratedVideoAsset> {
-  const mimeType = responseMimeType(response);
-  const buffer = await readResponseWithLimit(response, maxBytes, {
-    onOverflow: ({ maxBytes: limit }) => new Error(`venice generated video exceeds ${limit} bytes`),
-  });
-  return { buffer, mimeType, fileName: `video-1.${extensionForMime(mimeType)?.slice(1) ?? "mp4"}` };
 }
 
 async function downloadVeniceVideo(
@@ -432,19 +566,65 @@ async function downloadVeniceVideo(
   http: VeniceVideoHttp,
   maxBytes: number,
 ): Promise<GeneratedVideoAsset> {
-  const { response, release } = await veniceVideoFetchGuard({
+  const { response, release } = await fetchVeniceVideo({
     url,
-    timeoutMs: resolveProviderOperationTimeoutMs({
-      deadline: http.deadline,
-      defaultTimeoutMs: DEFAULT_HTTP_TIMEOUT_MS,
-    }),
+    http,
+    stage: "download",
     auditContext: "venice-video-download",
+    errorContext: "venice generated video download failed",
   });
   try {
-    await assertOkOrThrowHttpError(response, "venice generated video download failed");
-    return await readVideoBytes(response, maxBytes);
+    return await readGeneratedVideoAsset(response, {
+      label: "venice generated video download",
+      maxBytes,
+      validateBinaryResponse: true,
+      overflowUrl: url,
+    });
   } finally {
     await release();
+  }
+}
+
+// Privacy cleanup once the asset is in hand. Deleting on retrieve would lose
+// a paid result if the body read failed; a failed cleanup loses nothing.
+async function completeVeniceVideo(
+  model: string,
+  queueId: string,
+  http: VeniceVideoHttp,
+  downloadUrl?: string,
+) {
+  if (downloadUrl) {
+    // Private outputs are served from a presigned URL that stays valid until
+    // expiry; Venice revokes it on DELETE, so nobody holding the link can
+    // fetch the (possibly sensitive) video after we have it. The URL is on a
+    // delivery origin, not api.venice.ai, so the bearer token never goes with it.
+    // Revocation and queue cleanup are independent; try both.
+    try {
+      const revoked = await fetchVeniceVideo({
+        url: downloadUrl,
+        init: { method: "DELETE" },
+        http,
+        stage: "create",
+        auditContext: "venice-video-revoke",
+        errorContext: "venice video download revoke failed",
+      });
+      await revoked.release();
+    } catch {
+      // The link expires on Venice's schedule; the queue cleanup below still runs.
+    }
+  }
+  try {
+    const { release } = await postVeniceJson({
+      path: "/video/complete",
+      body: { model, queue_id: queueId },
+      http,
+      stage: "create",
+      auditContext: "venice-video-complete",
+      errorContext: "venice video cleanup failed",
+    });
+    await release();
+  } catch {
+    // Media stays until Venice's own expiry; nothing user-visible is lost.
   }
 }
 
@@ -459,16 +639,23 @@ async function retrieveVeniceVideo(params: {
   maxBytes: number;
 }): Promise<GeneratedVideoAsset> {
   for (;;) {
-    const { response, release } = await postVeniceJson(
-      "/video/retrieve",
-      { model: params.model, queue_id: params.queueId, delete_media_on_completion: true },
-      params.http,
-      "venice-video-retrieve",
-    );
+    const { response, release } = await postVeniceJson({
+      path: "/video/retrieve",
+      body: { model: params.model, queue_id: params.queueId },
+      http: params.http,
+      stage: "poll",
+      retry: POLL_RETRY,
+      auditContext: "venice-video-retrieve",
+      errorContext: "venice video status request failed",
+    });
     try {
-      await assertOkOrThrowHttpError(response, "venice video status request failed");
-      if (responseMimeType(response).startsWith("video/")) {
-        return await readVideoBytes(response, params.maxBytes);
+      if (isVideoResponse(response)) {
+        const video = await readGeneratedVideoAsset(response, {
+          label: "venice generated video",
+          maxBytes: params.maxBytes,
+        });
+        await completeVeniceVideo(params.model, params.queueId, params.http);
+        return video;
       }
       const payload = await readVeniceJson(response, "venice video status request failed");
       const status = isRecord(payload) ? normalizeOptionalString(payload.status) : undefined;
@@ -479,7 +666,13 @@ async function retrieveVeniceVideo(params: {
         if (!params.downloadUrl) {
           throw new Error(VENICE_VIDEO_MALFORMED_RESPONSE);
         }
-        return await downloadVeniceVideo(params.downloadUrl, params.http, params.maxBytes);
+        const video = await downloadVeniceVideo(params.downloadUrl, params.http, params.maxBytes);
+        // An oversized private result is delivered by URL, so that link must
+        // stay live; cleanup only once the bytes are in hand.
+        if (video.buffer) {
+          await completeVeniceVideo(params.model, params.queueId, params.http, params.downloadUrl);
+        }
+        return video;
       }
       if (status.toUpperCase() !== "PROCESSING") {
         // Venice documents only PROCESSING/COMPLETED; anything else is a
@@ -543,6 +736,7 @@ export function buildVeniceVideoGenerationProvider(): VideoGenerationProvider {
     resolveModelCapabilities: ({ model }) => resolveVeniceModelCapabilities(model),
     async generateVideo(req) {
       const model = resolveVeniceVideoModel(req);
+      assertVeniceVideoInputs(model, await fetchVeniceVideoConstraints(model), req);
       const body = buildVeniceVideoRequestBody(req, model);
       const auth = await resolveApiKeyForProvider({
         provider: PROVIDER_ID,
@@ -570,7 +764,7 @@ export function buildVeniceVideoGenerationProvider(): VideoGenerationProvider {
         queueId,
         downloadUrl,
         http,
-        maxBytes: resolveGeneratedVideoMaxBytes(req),
+        maxBytes: resolveGeneratedMediaMaxBytes(req.cfg, "video"),
       });
       return {
         videos: [video],

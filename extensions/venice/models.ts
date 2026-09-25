@@ -6,7 +6,10 @@ import {
 import { buildManifestModelProviderConfig } from "openclaw/plugin-sdk/provider-catalog-shared";
 import type { ModelDefinitionConfig } from "openclaw/plugin-sdk/provider-model-shared";
 import { createSubsystemLogger, retryAsync } from "openclaw/plugin-sdk/runtime-env";
-import { normalizeLowercaseStringOrEmpty } from "openclaw/plugin-sdk/string-coerce-runtime";
+import {
+  isRecord,
+  normalizeLowercaseStringOrEmpty,
+} from "openclaw/plugin-sdk/string-coerce-runtime";
 import manifest from "./openclaw.plugin.json" with { type: "json" };
 
 const log = createSubsystemLogger("venice-models");
@@ -52,6 +55,38 @@ const VENICE_DISCOVERY_RETRYABLE_NETWORK_CODES = new Set([
 ]);
 
 export const VENICE_MODEL_CATALOG: ModelDefinitionConfig[] = VENICE_MANIFEST_PROVIDER.models;
+
+// Media constraints change when Venice adds models, not per request; cache
+// them well past the text catalog's 60s so polling loops never refetch.
+const VENICE_MEDIA_CATALOG_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * Live `model_spec` for one Venice image or video model. Venice's `/models`
+ * listing is public: its OpenAPI security is `[{}, BearerAuth]` (token
+ * optional) and it answers 200 without one. The lookup is advisory (it narrows
+ * geometry and mode checks), so any failure resolves to `undefined` and
+ * callers fall back to Venice's own validation.
+ */
+export async function fetchVeniceLiveModelSpec(
+  type: "image" | "video",
+  model: string,
+): Promise<Record<string, unknown> | undefined> {
+  try {
+    const rows = await getCachedLiveProviderModelRows({
+      providerId: "venice",
+      endpoint: `${VENICE_BASE_URL}/models?type=${type}`,
+      timeoutMs: VENICE_DISCOVERY_TIMEOUT_MS,
+      ttlMs: VENICE_MEDIA_CATALOG_TTL_MS,
+      policy: { allowedHostnames: VENICE_ALLOWED_HOSTNAMES },
+      auditContext: `venice-${type}-model-discovery`,
+      shouldCacheRows: (candidate) => candidate.length > 0,
+    });
+    const row = rows.find((entry) => isRecord(entry) && entry.id === model);
+    return isRecord(row) && isRecord(row.model_spec) ? row.model_spec : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 type VeniceCatalogEntry = ModelDefinitionConfig;
 

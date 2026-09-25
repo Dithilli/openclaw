@@ -1,14 +1,13 @@
 import * as providerAuth from "openclaw/plugin-sdk/provider-auth-runtime";
+import { clearLiveCatalogCacheForTests } from "openclaw/plugin-sdk/provider-catalog-live-runtime";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { fetchWithSsrFGuardMock } = vi.hoisted(() => ({
   fetchWithSsrFGuardMock: vi.fn(),
 }));
 
-import {
-  buildVeniceImageGenerationProvider,
-  setVeniceImageFetchGuardForTesting,
-} from "./image-generation-provider.js";
+import { buildVeniceImageGenerationProvider } from "./image-generation-provider.js";
+import { setVeniceImageFetchGuardForTesting } from "./test-support.js";
 
 // 1x1 transparent PNG.
 const PNG_BASE64 =
@@ -23,8 +22,16 @@ function lastRequest() {
 }
 
 describe("venice image-generation provider", () => {
+  function stubLiveImageCatalog(rows: unknown[] = []) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ data: rows })),
+    );
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
+    stubLiveImageCatalog();
     vi.spyOn(providerAuth, "resolveApiKeyForProvider").mockResolvedValue({
       apiKey: "venice-test-key",
       source: "env",
@@ -35,6 +42,8 @@ describe("venice image-generation provider", () => {
 
   afterEach(() => {
     setVeniceImageFetchGuardForTesting(null);
+    clearLiveCatalogCacheForTests();
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
@@ -71,13 +80,16 @@ describe("venice image-generation provider", () => {
     expect(body).toMatchObject({
       model: "lustify-v8",
       prompt: "a serene mountain lake",
-      aspect_ratio: "16:9",
+      // lustify-v8 is pixel-addressed, so the ratio becomes dimensions even
+      // when the live catalog is unavailable.
+      width: 1280,
+      height: 720,
       variants: 2,
       return_binary: false,
       // Uncensored-by-default: the Venice plugin disables safe_mode.
       safe_mode: false,
     });
-    expect(body.width).toBeUndefined();
+    expect(body.aspect_ratio).toBeUndefined();
 
     expect(result.model).toBe("lustify-v8");
     expect(result.images).toHaveLength(1);
@@ -85,7 +97,7 @@ describe("venice image-generation provider", () => {
     expect(result.images[0]?.buffer.length).toBeGreaterThan(0);
   });
 
-  it("maps an explicit size to clamped width/height and defaults the model", async () => {
+  it("maps an explicit size to proportionally fitted width/height and defaults the model", async () => {
     mockImageResponse();
     const provider = buildVeniceImageGenerationProvider();
     await provider.generateImage({
@@ -98,10 +110,152 @@ describe("venice image-generation provider", () => {
 
     const body = JSON.parse(String(lastRequest().init?.body));
     expect(body.model).toBe(provider.defaultModel);
-    expect(body.width).toBe(1280); // clamped to Venice max edge
-    expect(body.height).toBe(768);
+    // 2048x768 scales together to the 1280px edge cap, then snaps to the divisor.
+    expect(body.width).toBe(1280);
+    expect(body.height).toBe(480);
     expect(body.aspect_ratio).toBeUndefined();
     expect(body.variants).toBe(1);
+  });
+
+  it("sends an aspect ratio instead of pixel dimensions to ratio-addressed models", async () => {
+    stubLiveImageCatalog([
+      {
+        id: "qwen-image-2",
+        object: "model",
+        type: "image",
+        model_spec: {
+          constraints: { aspectRatios: ["1:1", "16:9", "9:16"], widthHeightDivisor: 1 },
+        },
+      },
+    ]);
+    mockImageResponse();
+    const provider = buildVeniceImageGenerationProvider();
+    await provider.generateImage({
+      provider: "venice",
+      model: "qwen-image-2",
+      prompt: "test",
+      cfg: {} as never,
+      size: "1280x720",
+    });
+
+    const body = JSON.parse(String(lastRequest().init?.body));
+    expect(body.width).toBeUndefined();
+    expect(body.height).toBeUndefined();
+    expect(body.aspect_ratio).toBe("16:9");
+  });
+
+  it("sends resolution tiers only to models that publish them", async () => {
+    stubLiveImageCatalog([
+      {
+        id: "qwen-image-2",
+        object: "model",
+        type: "image",
+        model_spec: { constraints: { aspectRatios: ["1:1", "16:9"], widthHeightDivisor: 1 } },
+      },
+      {
+        id: "nano-banana-pro",
+        object: "model",
+        type: "image",
+        model_spec: {
+          constraints: { aspectRatios: ["1:1", "16:9"], resolutions: ["1K", "2K", "4K"] },
+        },
+      },
+    ]);
+    const provider = buildVeniceImageGenerationProvider();
+    for (const [model, expected] of [
+      ["qwen-image-2", undefined],
+      ["nano-banana-pro", "2K"],
+    ] as const) {
+      mockImageResponse();
+      await provider.generateImage({
+        provider: "venice",
+        model,
+        prompt: "test",
+        cfg: {} as never,
+        aspectRatio: "16:9",
+        resolution: "2K",
+      });
+      const body = JSON.parse(String(lastRequest().init?.body));
+      expect(body.aspect_ratio).toBe("16:9");
+      expect(body.resolution).toBe(expected);
+    }
+  });
+
+  it("derives pixel dimensions from an aspect ratio for pixel-addressed models", async () => {
+    stubLiveImageCatalog([
+      {
+        id: "venice-sd35",
+        object: "model",
+        type: "image",
+        model_spec: { constraints: { widthHeightDivisor: 16 } },
+      },
+    ]);
+    mockImageResponse();
+    const provider = buildVeniceImageGenerationProvider();
+    await provider.generateImage({
+      provider: "venice",
+      model: "venice-sd35",
+      prompt: "test",
+      cfg: {} as never,
+      aspectRatio: "16:9",
+      resolution: "2K",
+    });
+
+    const body = JSON.parse(String(lastRequest().init?.body));
+    expect(body).toMatchObject({ width: 1280, height: 720 });
+    expect(body.aspect_ratio).toBeUndefined();
+    expect(body.resolution).toBeUndefined();
+
+    // A resolution tier alone becomes a square long edge on pixel models.
+    mockImageResponse();
+    await provider.generateImage({
+      provider: "venice",
+      model: "venice-sd35",
+      prompt: "test",
+      cfg: {} as never,
+      resolution: "1K",
+    });
+    expect(JSON.parse(String(lastRequest().init?.body))).toMatchObject({
+      width: 1024,
+      height: 1024,
+    });
+
+    // An explicit size snaps to the model's dimension divisor.
+    mockImageResponse();
+    await provider.generateImage({
+      provider: "venice",
+      model: "venice-sd35",
+      prompt: "test",
+      cfg: {} as never,
+      size: "1000x1000",
+    });
+    expect(JSON.parse(String(lastRequest().init?.body))).toMatchObject({ width: 992, height: 992 });
+  });
+
+  it("falls back to an aspect ratio for unknown models when the catalog is unavailable", async () => {
+    mockImageResponse();
+    const provider = buildVeniceImageGenerationProvider();
+    await provider.generateImage({
+      provider: "venice",
+      model: "brand-new-ratio-model",
+      prompt: "test",
+      cfg: {} as never,
+      size: "1280x720",
+    });
+    const body = JSON.parse(String(lastRequest().init?.body));
+    expect(body.width).toBeUndefined();
+    expect(body.aspect_ratio).toBe("16:9");
+
+    // Oversized sizes keep their ratio rather than being clamped per edge.
+    mockImageResponse();
+    await provider.generateImage({
+      provider: "venice",
+      model: "brand-new-ratio-model",
+      prompt: "test",
+      cfg: {} as never,
+      size: "2048x1152",
+    });
+    expect(JSON.parse(String(lastRequest().init?.body)).aspect_ratio).toBe("16:9");
   });
 
   it("throws on a malformed response", async () => {

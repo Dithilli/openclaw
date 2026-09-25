@@ -16,7 +16,7 @@ import { assertOkOrThrowHttpError } from "openclaw/plugin-sdk/provider-http";
 import { readResponseWithLimit } from "openclaw/plugin-sdk/response-limit-runtime";
 import { fetchWithSsrFGuard } from "openclaw/plugin-sdk/ssrf-runtime";
 import { isRecord } from "openclaw/plugin-sdk/string-coerce-runtime";
-import { VENICE_ALLOWED_HOSTNAMES, VENICE_BASE_URL } from "./models.js";
+import { fetchVeniceLiveModelSpec, VENICE_ALLOWED_HOSTNAMES, VENICE_BASE_URL } from "./models.js";
 
 const PROVIDER_ID = "venice";
 // Venice's native default text-to-image model (model_spec trait "eliza-default").
@@ -51,21 +51,27 @@ const VENICE_EDIT_MODELS = [
   "flux-2-max-edit",
   "gpt-image-2-edit",
 ];
-const VENICE_SUPPORTED_SIZES = ["1024x1024", "1280x720", "720x1280", "1280x768", "768x1280"];
-const VENICE_SUPPORTED_ASPECT_RATIOS = ["1:1", "3:2", "2:3", "16:9", "9:16", "21:9", "3:4", "4:5"];
 const VENICE_OUTPUT_FORMATS: ImageGenerationOutputFormat[] = ["png", "jpeg", "webp"];
 
 let veniceImageFetchGuard = fetchWithSsrFGuard;
 
-export function setVeniceImageFetchGuardForTesting(impl: typeof fetchWithSsrFGuard | null): void {
+function setVeniceImageFetchGuardForTesting(impl: typeof fetchWithSsrFGuard | null): void {
   veniceImageFetchGuard = impl ?? fetchWithSsrFGuard;
 }
 
-function clampEdge(value: number): number {
-  return Math.max(1, Math.min(VENICE_MAX_EDGE, Math.floor(value)));
+// Test seam published through ./test-support.ts so production keeps no test-only exports.
+if (process.env.VITEST === "true") {
+  const key = Symbol.for("openclaw.veniceTestApi");
+  // SAFETY: only this plugin's seam blocks write this global, always as a plain record of setters.
+  const api = (Reflect.get(globalThis, key) as Record<string, unknown> | undefined) ?? {};
+  Reflect.set(globalThis, key, { ...api, setImageFetchGuard: setVeniceImageFetchGuardForTesting });
 }
 
-function parseSize(raw: string | undefined): { width: number; height: number } | null {
+type PixelSize = { width: number; height: number };
+
+// The requested dimensions as given; the caller's ratio is derived from these
+// before any edge limit is applied so an oversized request keeps its shape.
+function parseSize(raw: string | undefined): PixelSize | null {
   const match = /^(\d{2,5})x(\d{2,5})$/iu.exec(raw?.trim() ?? "");
   if (!match) {
     return null;
@@ -75,26 +81,146 @@ function parseSize(raw: string | undefined): { width: number; height: number } |
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
     return null;
   }
-  return { width: clampEdge(width), height: clampEdge(height) };
+  return { width, height };
 }
 
-// Venice models accept either width/height (pixel models) OR aspect_ratio,
-// optionally with a resolution tier. Send the most specific signal the caller
-// gave and let Venice apply each model's own defaults for the rest.
+// Scale both edges together so an oversized request keeps its aspect ratio.
+function fitToMaxEdge(size: PixelSize): PixelSize {
+  const longest = Math.max(size.width, size.height);
+  if (longest <= VENICE_MAX_EDGE) {
+    return size;
+  }
+  const scale = VENICE_MAX_EDGE / longest;
+  return {
+    width: Math.max(1, Math.round(size.width * scale)),
+    height: Math.max(1, Math.round(size.height * scale)),
+  };
+}
+
+type VeniceImageGeometry =
+  | { mode: "pixels"; divisor: number }
+  // An empty ratio list or undefined tiers mean the constraints are unknown; values pass through.
+  | { mode: "aspect"; aspectRatios: string[]; resolutions: string[] | undefined };
+
+// Venice's pixel-addressed image models are its Stable Diffusion family; every
+// other image model is ratio-addressed. Used only when the live catalog is
+// unavailable, so a catalog blip does not turn ratio-model requests into 400s.
+const VENICE_PIXEL_MODEL_DIVISORS: Readonly<Record<string, number>> = {
+  "venice-sd35": 16,
+  "wai-Illustrious": 16,
+  "lustify-v8": 8,
+  "lustify-v7": 8,
+  "lustify-sdxl": 8,
+  "z-image-turbo": 8,
+  chroma: 8,
+};
+
+// Venice image models are either pixel-addressed (`width`/`height`, a
+// `widthHeightDivisor` constraint and no `aspectRatios`) or ratio-addressed
+// (`aspect_ratio` plus an optional resolution tier). Ratio models reject pixel
+// dimensions and pixel models ignore `aspect_ratio`, so each control is
+// translated into the form the selected model accepts.
+async function resolveVeniceImageGeometry(model: string): Promise<VeniceImageGeometry> {
+  const spec = await fetchVeniceLiveModelSpec("image", model);
+  const constraints = isRecord(spec) && isRecord(spec.constraints) ? spec.constraints : undefined;
+  if (!constraints) {
+    const divisor = VENICE_PIXEL_MODEL_DIVISORS[model];
+    return divisor
+      ? { mode: "pixels", divisor }
+      : { mode: "aspect", aspectRatios: [], resolutions: undefined };
+  }
+  const aspectRatios = readStringList(constraints.aspectRatios);
+  if (aspectRatios.length > 0) {
+    // Only resolution-tier models list `resolutions`; the others reject the field.
+    return { mode: "aspect", aspectRatios, resolutions: readStringList(constraints.resolutions) };
+  }
+  const divisor = constraints.widthHeightDivisor;
+  return {
+    mode: "pixels",
+    divisor: typeof divisor === "number" && divisor >= 1 ? Math.floor(divisor) : 1,
+  };
+}
+
+function readStringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string")
+    : [];
+}
+
+function gcd(a: number, b: number): number {
+  return b === 0 ? a : gcd(b, a % b);
+}
+
+function sizeToAspectRatio(size: PixelSize): string {
+  const divisor = gcd(size.width, size.height);
+  return `${size.width / divisor}:${size.height / divisor}`;
+}
+
+// Pixel models reject dimensions that are not multiples of their divisor.
+function snapToDivisor(size: PixelSize, divisor: number): PixelSize {
+  const snap = (value: number) => Math.max(divisor, Math.floor(value / divisor) * divisor);
+  return { width: snap(size.width), height: snap(size.height) };
+}
+
+// Resolution tiers are a ratio-model concept; on pixel models they become the
+// long edge. 1K maps to 1024; 2K/4K exceed Venice's 1280 cap, so they get the cap.
+function resolutionToLongEdge(resolution: string | undefined): number {
+  return resolution === "1K" ? 1024 : VENICE_MAX_EDGE;
+}
+
+// Fit the ratio (default square) inside the long edge, rounding the short
+// edge down to the model's dimension divisor.
+function pixelTarget(
+  ratio: string | undefined,
+  resolution: string | undefined,
+  divisor: number,
+): { width: number; height: number } | undefined {
+  if (!ratio && !resolution) {
+    return undefined;
+  }
+  const match = /^(\d{1,3}):(\d{1,3})$/u.exec(ratio ?? "1:1");
+  const w = Number.parseInt(match?.[1] ?? "", 10);
+  const h = Number.parseInt(match?.[2] ?? "", 10);
+  if (!(w > 0 && h > 0)) {
+    return undefined;
+  }
+  const long = resolutionToLongEdge(resolution);
+  const short = Math.max(
+    divisor,
+    Math.floor((long * Math.min(w, h)) / Math.max(w, h) / divisor) * divisor,
+  );
+  return w >= h ? { width: long, height: short } : { width: short, height: long };
+}
+
 function applyGeometry(
   body: Record<string, unknown>,
   req: { size?: string; aspectRatio?: string; resolution?: string },
+  geometry: VeniceImageGeometry,
 ): void {
   const size = parseSize(req.size);
-  if (size) {
-    body.width = size.width;
-    body.height = size.height;
+  const requestedRatio = req.aspectRatio?.trim() || undefined;
+  if (geometry.mode === "pixels") {
+    const pixels = size
+      ? snapToDivisor(fitToMaxEdge(size), geometry.divisor)
+      : pixelTarget(requestedRatio, req.resolution, geometry.divisor);
+    if (pixels) {
+      body.width = pixels.width;
+      body.height = pixels.height;
+    }
     return;
   }
-  if (req.aspectRatio?.trim()) {
-    body.aspect_ratio = req.aspectRatio.trim();
+  const sizeRatio = size ? sizeToAspectRatio(size) : undefined;
+  const ratioAccepted =
+    sizeRatio !== undefined &&
+    (geometry.aspectRatios.length === 0 || geometry.aspectRatios.includes(sizeRatio));
+  const aspectRatio = requestedRatio ?? (ratioAccepted ? sizeRatio : undefined);
+  if (aspectRatio) {
+    body.aspect_ratio = aspectRatio;
   }
-  if (req.resolution) {
+  const resolutionAccepted =
+    geometry.resolutions === undefined ||
+    geometry.resolutions.some((tier) => tier.toUpperCase() === req.resolution?.toUpperCase());
+  if (req.resolution && resolutionAccepted) {
     body.resolution = req.resolution;
   }
 }
@@ -197,9 +323,10 @@ export function buildVeniceImageGenerationProvider(): ImageGenerationProvider {
         supportsAspectRatio: true,
         supportsResolution: true,
       },
+      // No size or aspect-ratio lists: pixel models take any dimensions up to
+      // 1280 and ratio models each publish their own list, so a provider-wide
+      // list would only make core snap valid values to the wrong ones.
       geometry: {
-        sizes: [...VENICE_SUPPORTED_SIZES],
-        aspectRatios: [...VENICE_SUPPORTED_ASPECT_RATIOS],
         resolutions: ["1K", "2K", "4K"],
       },
       output: {
@@ -234,7 +361,7 @@ export function buildVeniceImageGenerationProvider(): ImageGenerationProvider {
         safe_mode: false,
         variants: Math.max(1, Math.min(4, req.count ?? 1)),
       };
-      applyGeometry(requestBody, req);
+      applyGeometry(requestBody, req, await resolveVeniceImageGeometry(model));
 
       const { response, release } = await veniceImageFetchGuard({
         url: `${VENICE_BASE_URL}/image/generate`,

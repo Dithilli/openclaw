@@ -2,12 +2,8 @@
 import { clearLiveCatalogCacheForTests } from "openclaw/plugin-sdk/provider-catalog-live-runtime";
 import { expectExplicitVideoGenerationCapabilities } from "openclaw/plugin-sdk/provider-test-contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  buildVeniceVideoGenerationProvider,
-  buildVeniceVideoRequestBody,
-  capabilitiesFromVeniceVideoConstraints,
-  setVeniceVideoFetchGuardForTesting,
-} from "./video-generation-provider.js";
+import { setVeniceVideoFetchGuardForTesting } from "./test-support.js";
+import { buildVeniceVideoGenerationProvider } from "./video-generation-provider.js";
 
 const { fetchGuardMock, resolveApiKeyForProviderMock } = vi.hoisted(() => ({
   fetchGuardMock: vi.fn(),
@@ -39,6 +35,18 @@ function releasedVideo(bytes: string) {
   );
 }
 
+function guardInit(index: number): RequestInit | undefined {
+  return (fetchGuardMock.mock.calls[index]?.[0] as { init?: RequestInit } | undefined)?.init;
+}
+
+function requireInit(index: number): RequestInit {
+  const init = guardInit(index);
+  if (!init) {
+    throw new Error(`expected venice fetch guard init ${index + 1}`);
+  }
+  return init;
+}
+
 function guardCall(index: number): { url: string; body: Record<string, unknown> } {
   const request = fetchGuardMock.mock.calls[index]?.[0] as
     | { url: string; init?: { body?: string } }
@@ -53,7 +61,19 @@ function guardCall(index: number): { url: string; body: Record<string, unknown> 
 }
 
 describe("venice video generation provider", () => {
+  function stubLiveVideoCatalog(rows: unknown[] = []) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ data: rows })),
+    );
+  }
+
+  function liveVideoRow(id: string, constraints: Record<string, unknown>) {
+    return { id, object: "model", type: "video", model_spec: { constraints } };
+  }
+
   beforeEach(() => {
+    stubLiveVideoCatalog();
     resolveApiKeyForProviderMock.mockResolvedValue({
       apiKey: "venice-test-key",
       source: "env",
@@ -67,6 +87,7 @@ describe("venice video generation provider", () => {
     fetchGuardMock.mockReset();
     resolveApiKeyForProviderMock.mockReset();
     clearLiveCatalogCacheForTests();
+    vi.unstubAllGlobals();
     vi.useRealTimers();
   });
 
@@ -83,7 +104,8 @@ describe("venice video generation provider", () => {
       .mockResolvedValueOnce(
         releasedJson({ status: "PROCESSING", average_execution_time: 1, execution_duration: 1 }),
       )
-      .mockResolvedValueOnce(releasedVideo("mp4-bytes"));
+      .mockResolvedValueOnce(releasedVideo("mp4-bytes"))
+      .mockResolvedValueOnce(releasedJson({ success: true }));
     vi.useFakeTimers();
     const provider = buildVeniceVideoGenerationProvider();
     const pending = provider.generateVideo({
@@ -112,12 +134,10 @@ describe("venice video generation provider", () => {
       resolution: "720p",
     });
     expect(guardCall(2).url).toBe("https://api.venice.ai/api/v1/video/retrieve");
-    expect(guardCall(2).body).toEqual({
-      model: "wan-3-0-text-to-video",
-      queue_id: "q-1",
-      delete_media_on_completion: true,
-    });
-    expect(fetchGuardMock).toHaveBeenCalledTimes(4);
+    expect(guardCall(2).body).toEqual({ model: "wan-3-0-text-to-video", queue_id: "q-1" });
+    // Cleanup happens only after the bytes were read successfully.
+    expect(guardCall(4).url).toBe("https://api.venice.ai/api/v1/video/complete");
+    expect(fetchGuardMock).toHaveBeenCalledTimes(5);
     expect(result.model).toBe("wan-3-0-text-to-video");
     expect(result.metadata).toEqual({ queueId: "q-1", quoteUsd: 0.42 });
     expect(result.videos[0]?.mimeType).toBe("video/mp4");
@@ -132,20 +152,83 @@ describe("venice video generation provider", () => {
         releasedJson({ queue_id: "q-2", download_url: "https://files.venice.ai/q-2.mp4" }),
       )
       .mockResolvedValueOnce(releasedJson({ status: "COMPLETED" }))
-      .mockResolvedValueOnce(releasedVideo("private-bytes"));
+      .mockResolvedValueOnce(releasedVideo("private-bytes"))
+      .mockResolvedValueOnce(released(new Response(null, { status: 204 })))
+      .mockResolvedValueOnce(releasedJson({ success: true }));
     const provider = buildVeniceVideoGenerationProvider();
     const result = await provider.generateVideo(BASE_REQUEST);
 
+    // Media must survive until the download succeeds, then the presigned URL
+    // is revoked and the queue entry cleaned up.
+    expect(guardCall(2).body).toEqual({ model: "wan-3-0-text-to-video", queue_id: "q-2" });
     expect(guardCall(3).url).toBe("https://files.venice.ai/q-2.mp4");
+    expect(guardCall(4).url).toBe("https://files.venice.ai/q-2.mp4");
+    expect(requireInit(4).method).toBe("DELETE");
+    // The presigned delivery origin never receives the API bearer token.
+    expect(guardInit(3)?.headers).toBeUndefined();
+    expect(guardInit(4)?.headers).toBeUndefined();
+    expect(guardCall(5).url).toBe("https://api.venice.ai/api/v1/video/complete");
+    expect(guardCall(5).body).toEqual({ model: "wan-3-0-text-to-video", queue_id: "q-2" });
+    expect(fetchGuardMock).toHaveBeenCalledTimes(6);
     expect(result.metadata).toEqual({ queueId: "q-2" });
     expect(result.videos[0]?.buffer?.toString()).toBe("private-bytes");
+  });
+
+  it("still cleans up the queue entry when revoking the private download link fails", async () => {
+    fetchGuardMock
+      .mockResolvedValueOnce(releasedJson({ quote: 0.1 }))
+      .mockResolvedValueOnce(
+        releasedJson({ queue_id: "q-11", download_url: "https://files.venice.ai/q-11.mp4" }),
+      )
+      .mockResolvedValueOnce(releasedJson({ status: "COMPLETED" }))
+      .mockResolvedValueOnce(releasedVideo("private-bytes"))
+      .mockResolvedValueOnce(released(new Response("gone", { status: 410 })))
+      .mockResolvedValueOnce(releasedJson({ success: true }));
+    const provider = buildVeniceVideoGenerationProvider();
+    const result = await provider.generateVideo(BASE_REQUEST);
+    expect(guardCall(5).url).toBe("https://api.venice.ai/api/v1/video/complete");
+    expect(result.videos[0]?.buffer?.toString()).toBe("private-bytes");
+  });
+
+  it("keeps an oversized private download link live instead of revoking it", async () => {
+    fetchGuardMock
+      .mockResolvedValueOnce(releasedJson({ quote: 0.1 }))
+      .mockResolvedValueOnce(
+        releasedJson({ queue_id: "q-12", download_url: "https://files.venice.ai/q-12.mp4" }),
+      )
+      .mockResolvedValueOnce(releasedJson({ status: "COMPLETED" }))
+      .mockResolvedValueOnce(releasedVideo("far too many bytes for a one-byte cap"));
+    const provider = buildVeniceVideoGenerationProvider();
+    const result = await provider.generateVideo({
+      ...BASE_REQUEST,
+      cfg: { agents: { defaults: { mediaMaxMb: 1 / (1024 * 1024) } } } as never,
+    });
+    expect(result.videos[0]).toMatchObject({ url: "https://files.venice.ai/q-12.mp4" });
+    expect(result.videos[0]?.buffer).toBeUndefined();
+    expect(fetchGuardMock).toHaveBeenCalledTimes(4);
+  });
+
+  it("skips the quote for jobs with video inputs instead of reporting the no-reference tier", async () => {
+    fetchGuardMock
+      .mockResolvedValueOnce(releasedJson({ queue_id: "q-9" }))
+      .mockResolvedValueOnce(releasedVideo("bytes"))
+      .mockResolvedValueOnce(releasedJson({ success: true }));
+    const provider = buildVeniceVideoGenerationProvider();
+    const result = await provider.generateVideo({
+      ...BASE_REQUEST,
+      model: "wan-3-0-reference-to-video",
+      inputVideos: [{ url: "https://example.com/motion.mp4", role: "reference_video" }],
+    });
+    expect(guardCall(0).url).toBe("https://api.venice.ai/api/v1/video/queue");
+    expect(result.metadata).toEqual({ queueId: "q-9" });
   });
 
   it("switches the default text model to its image-to-video sibling when an image is attached", async () => {
     fetchGuardMock
       .mockResolvedValueOnce(releasedJson({ quote: 0.1 }))
       .mockResolvedValueOnce(releasedJson({ queue_id: "q-3" }))
-      .mockResolvedValueOnce(releasedVideo("bytes"));
+      .mockResolvedValueOnce(releasedVideo("bytes"))
+      .mockResolvedValueOnce(releasedJson({ success: true }));
     const provider = buildVeniceVideoGenerationProvider();
     const result = await provider.generateVideo({
       ...BASE_REQUEST,
@@ -159,24 +242,39 @@ describe("venice video generation provider", () => {
     expect(result.model).toBe("wan-3-0-image-to-video");
   });
 
-  it("maps reference roles onto Venice's input fields", () => {
-    const body = buildVeniceVideoRequestBody(
-      {
-        ...BASE_REQUEST,
-        model: "wan-3-0-reference-to-video",
-        inputImages: [
-          { url: "https://example.com/first.png", role: "first_frame" },
-          { url: "https://example.com/last.png", role: "last_frame" },
-          { url: "https://example.com/ref-a.png", role: "reference_image" },
-          { url: "https://example.com/ref-b.png", role: "reference_image" },
-        ],
-        inputVideos: [{ url: "https://example.com/motion.mp4", role: "reference_video" }],
-        inputAudios: [{ url: "https://example.com/music.mp3" }],
-      },
-      "wan-3-0-reference-to-video",
-    );
+  it("maps reference roles onto Venice's input fields", async () => {
+    stubLiveVideoCatalog([
+      liveVideoRow("wan-3-0-reference-to-video", {
+        model_type: "image-to-video",
+        aspect_ratios: [],
+        resolutions: [],
+        durations: ["5s"],
+        audio_configurable: true,
+        audio_input: true,
+        video_input: true,
+      }),
+    ]);
+    fetchGuardMock
+      .mockResolvedValueOnce(releasedJson({ queue_id: "q-roles" }))
+      .mockResolvedValueOnce(releasedVideo("bytes"))
+      .mockResolvedValueOnce(releasedJson({ success: true }));
+    const provider = buildVeniceVideoGenerationProvider();
+    await provider.generateVideo({
+      ...BASE_REQUEST,
+      model: "wan-3-0-reference-to-video",
+      inputImages: [
+        { url: "https://example.com/first.png", role: "first_frame" },
+        { url: "https://example.com/last.png", role: "last_frame" },
+        { url: "https://example.com/ref-a.png", role: "reference_image" },
+        { url: "https://example.com/ref-b.png", role: "reference_image" },
+      ],
+      inputVideos: [{ url: "https://example.com/motion.mp4", role: "reference_video" }],
+      inputAudios: [{ url: "https://example.com/music.mp3" }],
+    });
 
-    expect(body).toEqual({
+    // Video inputs skip the quote, so the queue call comes first.
+    expect(guardCall(0).url).toBe("https://api.venice.ai/api/v1/video/queue");
+    expect(guardCall(0).body).toEqual({
       model: "wan-3-0-reference-to-video",
       prompt: "a fox running through snow",
       duration: "5s",
@@ -218,7 +316,8 @@ describe("venice video generation provider", () => {
     fetchGuardMock
       .mockRejectedValueOnce(new Error("quote host unreachable"))
       .mockResolvedValueOnce(releasedJson({ queue_id: "q-6" }))
-      .mockResolvedValueOnce(releasedVideo("bytes"));
+      .mockResolvedValueOnce(releasedVideo("bytes"))
+      .mockResolvedValueOnce(releasedJson({ success: true }));
     const provider = buildVeniceVideoGenerationProvider();
     const result = await provider.generateVideo(BASE_REQUEST);
     expect(result.metadata).toEqual({ queueId: "q-6" });
@@ -227,8 +326,32 @@ describe("venice video generation provider", () => {
     fetchGuardMock
       .mockResolvedValueOnce(released(new Response("<html>", { status: 200 })))
       .mockResolvedValueOnce(releasedJson({ queue_id: "q-7" }))
-      .mockResolvedValueOnce(releasedVideo("bytes"));
+      .mockResolvedValueOnce(releasedVideo("bytes"))
+      .mockResolvedValueOnce(releasedJson({ success: true }));
     expect((await provider.generateVideo(BASE_REQUEST)).metadata).toEqual({ queueId: "q-7" });
+  });
+
+  it("never retries the billed queue submission on a transient failure", async () => {
+    fetchGuardMock
+      .mockResolvedValueOnce(releasedJson({ quote: 0.1 }))
+      .mockResolvedValueOnce(released(new Response("<html>502</html>", { status: 502 })));
+    const provider = buildVeniceVideoGenerationProvider();
+    await expect(provider.generateVideo(BASE_REQUEST)).rejects.toThrow(/502/);
+    expect(fetchGuardMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries a transient retrieve failure instead of dropping the queued job", async () => {
+    fetchGuardMock
+      .mockResolvedValueOnce(releasedJson({ quote: 0.1 }))
+      .mockResolvedValueOnce(releasedJson({ queue_id: "q-8" }))
+      .mockResolvedValueOnce(released(new Response("<html>502</html>", { status: 502 })))
+      .mockResolvedValueOnce(releasedVideo("bytes-after-retry"))
+      .mockResolvedValueOnce(releasedJson({ success: true }));
+    const provider = buildVeniceVideoGenerationProvider();
+    const result = await provider.generateVideo(BASE_REQUEST);
+    expect(fetchGuardMock).toHaveBeenCalledTimes(5);
+    expect(guardCall(3).url).toBe("https://api.venice.ai/api/v1/video/retrieve");
+    expect(result.videos[0]?.buffer?.toString()).toBe("bytes-after-retry");
   });
 
   it("stops polling when the operation deadline is exhausted", async () => {
@@ -244,48 +367,37 @@ describe("venice video generation provider", () => {
     await rejection;
   });
 
-  function liveVideoRow(id: string, constraints: Record<string, unknown>) {
-    return { id, object: "model", type: "video", model_spec: { constraints } };
-  }
-
   it("derives per-model capabilities from live Venice video constraints", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () =>
-        Response.json({
-          data: [
-            liveVideoRow("seedance-2-0-image-to-video-basic", {
-              model_type: "image-to-video",
-              aspect_ratios: [],
-              resolutions: ["4k", "1080p", "720p"],
-              durations: ["4s", "5s", "Auto", "10s"],
-              audio: true,
-              audio_configurable: true,
-              audio_input: true,
-              video_input: false,
-            }),
-            liveVideoRow("wan-3-0-text-to-video", {
-              model_type: "text-to-video",
-              aspect_ratios: ["16:9"],
-              resolutions: ["720p"],
-              durations: ["5s"],
-              audio_configurable: true,
-              audio_input: false,
-              video_input: false,
-            }),
-            liveVideoRow("wan-3-0-image-to-video", {
-              model_type: "image-to-video",
-              aspect_ratios: ["9:16"],
-              resolutions: ["1080p"],
-              durations: ["5s", "10s"],
-              audio_configurable: false,
-              audio_input: false,
-              video_input: false,
-            }),
-          ],
-        }),
-      ),
-    );
+    stubLiveVideoCatalog([
+      liveVideoRow("seedance-2-0-image-to-video-basic", {
+        model_type: "image-to-video",
+        aspect_ratios: [],
+        resolutions: ["4k", "1080p", "720p"],
+        durations: ["4s", "5s", "Auto", "10s"],
+        audio: true,
+        audio_configurable: true,
+        audio_input: true,
+        video_input: false,
+      }),
+      liveVideoRow("wan-3-0-text-to-video", {
+        model_type: "text-to-video",
+        aspect_ratios: ["16:9"],
+        resolutions: ["720p"],
+        durations: ["5s"],
+        audio_configurable: true,
+        audio_input: false,
+        video_input: false,
+      }),
+      liveVideoRow("wan-3-0-image-to-video", {
+        model_type: "image-to-video",
+        aspect_ratios: ["9:16"],
+        resolutions: ["1080p"],
+        durations: ["5s", "10s"],
+        audio_configurable: false,
+        audio_input: false,
+        video_input: false,
+      }),
+    ]);
     try {
       const provider = buildVeniceVideoGenerationProvider();
       const capabilities = await provider.resolveModelCapabilities?.({
@@ -333,47 +445,103 @@ describe("venice video generation provider", () => {
     }
   });
 
-  it("marks text-to-video constraints as generate-only and video_input as video-to-video", () => {
-    const textOnly = capabilitiesFromVeniceVideoConstraints("wan-3-0-text-to-video", {
-      modelType: "text-to-video",
-      durations: [5, 10],
-      aspectRatios: ["16:9"],
-      resolutions: ["720P"],
-      audioConfigurable: false,
-      audioInput: false,
-      videoInput: false,
-    });
-    expect(textOnly.imageToVideo).toMatchObject({ enabled: false, maxInputImages: 0 });
-    expect(textOnly.generate?.aspectRatios).toEqual(["16:9"]);
+  it("rejects text-only requests against image-only models before queueing", async () => {
+    stubLiveVideoCatalog([
+      liveVideoRow("kling-v3-pro-image-to-video", {
+        model_type: "image-to-video",
+        aspect_ratios: [],
+        resolutions: [],
+        durations: ["5s"],
+        audio_configurable: false,
+        audio_input: false,
+        video_input: false,
+      }),
+    ]);
+    const provider = buildVeniceVideoGenerationProvider();
+    await expect(
+      provider.generateVideo({ ...BASE_REQUEST, model: "kling-v3-pro-image-to-video" }),
+    ).rejects.toThrow("requires an image input");
+    expect(fetchGuardMock).not.toHaveBeenCalled();
+  });
 
-    const edit = capabilitiesFromVeniceVideoConstraints("gemini-omni-flash-1-1-video-to-video", {
-      modelType: "video",
-      durations: [],
-      aspectRatios: [],
-      resolutions: [],
-      audioConfigurable: false,
-      audioInput: false,
-      videoInput: true,
+  it("accepts video-only references on reference models that take video input", async () => {
+    stubLiveVideoCatalog([
+      liveVideoRow("wan-3-0-reference-to-video", {
+        model_type: "image-to-video",
+        aspect_ratios: [],
+        resolutions: [],
+        durations: ["5s"],
+        audio_configurable: false,
+        audio_input: false,
+        video_input: true,
+      }),
+    ]);
+    fetchGuardMock
+      .mockResolvedValueOnce(releasedJson({ queue_id: "q-10" }))
+      .mockResolvedValueOnce(releasedVideo("bytes"))
+      .mockResolvedValueOnce(releasedJson({ success: true }));
+    const provider = buildVeniceVideoGenerationProvider();
+    const result = await provider.generateVideo({
+      ...BASE_REQUEST,
+      model: "wan-3-0-reference-to-video",
+      inputVideos: [{ url: "https://example.com/motion.mp4", role: "reference_video" }],
     });
-    expect(edit.imageToVideo?.enabled).toBe(false);
-    expect(edit.videoToVideo).toMatchObject({
+    expect(guardCall(0).url).toBe("https://api.venice.ai/api/v1/video/queue");
+    expect(result.metadata).toEqual({ queueId: "q-10" });
+  });
+
+  it("marks text-to-video constraints as generate-only and video_input as video-to-video", async () => {
+    stubLiveVideoCatalog([
+      liveVideoRow("wan-3-0-text-to-video", {
+        model_type: "text-to-video",
+        aspect_ratios: ["16:9"],
+        resolutions: ["720p"],
+        durations: ["5s", "10s"],
+        audio_configurable: false,
+        audio_input: false,
+        video_input: false,
+      }),
+      liveVideoRow("gemini-omni-flash-1-1-video-to-video", {
+        model_type: "video",
+        aspect_ratios: [],
+        resolutions: [],
+        durations: ["Auto"],
+        audio_configurable: false,
+        audio_input: false,
+        video_input: true,
+      }),
+      liveVideoRow("wan-3-0-reference-to-video", {
+        model_type: "image-to-video",
+        aspect_ratios: [],
+        resolutions: [],
+        durations: ["5s"],
+        audio_configurable: true,
+        audio_input: true,
+        video_input: true,
+      }),
+    ]);
+    const provider = buildVeniceVideoGenerationProvider();
+    const resolve = (model: string) =>
+      provider.resolveModelCapabilities?.({ provider: "venice", model, cfg: {} as never });
+
+    const textOnly = await resolve("wan-3-0-text-to-video");
+    // The text default advertises its image sibling; the sibling row is absent
+    // here, so the text row's own (disabled) image mode stands.
+    expect(textOnly?.imageToVideo).toMatchObject({ enabled: false, maxInputImages: 0 });
+    expect(textOnly?.generate?.aspectRatios).toEqual(["16:9"]);
+
+    const edit = await resolve("gemini-omni-flash-1-1-video-to-video");
+    expect(edit?.imageToVideo?.enabled).toBe(false);
+    expect(edit?.videoToVideo).toMatchObject({
       enabled: true,
       maxInputVideos: 1,
       maxInputImages: 0,
     });
-    expect(edit.generate?.supportedDurationSeconds).toBeUndefined();
+    expect(edit?.generate?.supportedDurationSeconds).toBeUndefined();
 
-    const reference = capabilitiesFromVeniceVideoConstraints("wan-3-0-reference-to-video", {
-      modelType: "image-to-video",
-      durations: [5],
-      aspectRatios: [],
-      resolutions: [],
-      audioConfigurable: true,
-      audioInput: true,
-      videoInput: true,
-    });
-    expect(reference.imageToVideo).toMatchObject({ enabled: true, maxInputImages: 30 });
-    expect(reference.videoToVideo).toMatchObject({
+    const reference = await resolve("wan-3-0-reference-to-video");
+    expect(reference?.imageToVideo).toMatchObject({ enabled: true, maxInputImages: 30 });
+    expect(reference?.videoToVideo).toMatchObject({
       enabled: true,
       maxInputVideos: 10,
       maxInputImages: 30,
