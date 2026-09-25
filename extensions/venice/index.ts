@@ -12,6 +12,7 @@ import manifest from "./openclaw.plugin.json" with { type: "json" };
 import { buildStaticVeniceProvider } from "./provider-catalog.js";
 import { createVeniceStreamWrapper } from "./stream.js";
 import { fetchVeniceUsage } from "./usage.js";
+import { buildVeniceVideoGenerationProvider } from "./video-generation-provider.js";
 
 const PROVIDER_ID = "venice";
 const XAI_UNSUPPORTED_SCHEMA_KEYWORDS = [
@@ -75,5 +76,6 @@ export default defineSingleProviderPluginEntry({
   },
   register(api) {
     api.registerImageGenerationProvider(buildVeniceImageGenerationProvider());
+    api.registerVideoGenerationProvider(buildVeniceVideoGenerationProvider());
   },
 });
