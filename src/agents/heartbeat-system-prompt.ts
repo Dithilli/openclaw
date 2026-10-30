@@ -11,7 +11,11 @@ import { parseDurationMs } from "../cli/parse-duration.js";
 import type { AgentDefaultsConfig } from "../config/types.agent-defaults.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { normalizeAgentId } from "../routing/session-key.js";
-import { listAgentEntries, resolveAgentConfig, resolveDefaultAgentId } from "./agent-scope.js";
+import {
+  listExplicitHeartbeatAgentEntries,
+  resolveAgentConfig,
+  resolveDefaultAgentId,
+} from "./agent-scope.js";
 
 type HeartbeatConfig = AgentDefaultsConfig["heartbeat"];
 
@@ -36,12 +40,9 @@ function resolveHeartbeatConfigForSystemPrompt(
 // otherwise the default agent receives the standard heartbeat guidance.
 function isHeartbeatEnabledByAgentPolicy(config: OpenClawConfig, agentId: string): boolean {
   const resolvedAgentId = normalizeAgentId(agentId);
-  const agents = listAgentEntries(config);
-  const hasExplicitHeartbeatAgents = agents.some((entry) => Boolean(entry?.heartbeat));
-  if (hasExplicitHeartbeatAgents) {
-    return agents.some(
-      (entry) => Boolean(entry?.heartbeat) && normalizeAgentId(entry.id) === resolvedAgentId,
-    );
+  const explicit = listExplicitHeartbeatAgentEntries(config);
+  if (explicit.length > 0) {
+    return explicit.some((entry) => normalizeAgentId(entry.id) === resolvedAgentId);
   }
   return resolvedAgentId === resolveDefaultAgentId(config);
 }

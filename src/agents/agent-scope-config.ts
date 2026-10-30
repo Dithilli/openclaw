@@ -78,6 +78,16 @@ export function listAgentEntries(cfg: OpenClawConfig): AgentEntry[] {
   return list.filter((entry): entry is AgentEntry => entry !== null && typeof entry === "object");
 }
 
+/**
+ * Agent entries that opt into heartbeats explicitly. A non-empty result means
+ * only those agents run heartbeats; `agents.defaults.heartbeat` then shapes
+ * their config but enrolls nobody else. Reads the canonical entry list so a
+ * map-shaped `agents.entries` config is honored the same as `agents.list`.
+ */
+export function listExplicitHeartbeatAgentEntries(cfg: OpenClawConfig): AgentEntry[] {
+  return listAgentEntries(cfg).filter((entry) => Boolean(entry.heartbeat));
+}
+
 /** Lists unique configured agent ids, falling back to the default agent id. */
 export function listAgentIds(cfg: OpenClawConfig): string[] {
   const agents = listAgentEntries(cfg);
