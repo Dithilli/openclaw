@@ -1,6 +1,10 @@
 /** Doctor warnings for heartbeat.session values that resolve to missing delivery sessions. */
 import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
-import { listAgentEntries, listAgentIds, resolveAgentConfig } from "../agents/agent-scope.js";
+import {
+  listAgentIds,
+  listExplicitHeartbeatAgentEntries,
+  resolveAgentConfig,
+} from "../agents/agent-scope.js";
 import { canonicalizeMainSessionAlias } from "../config/sessions/main-session.js";
 import { resolveStorePath } from "../config/sessions/paths.js";
 import type { AgentDefaultsConfig } from "../config/types.agent-defaults.js";
@@ -17,10 +21,6 @@ import { isSubagentSessionKey } from "../sessions/session-key-utils.js";
 
 type HeartbeatConfig = AgentDefaultsConfig["heartbeat"];
 
-function hasExplicitHeartbeatAgents(cfg: OpenClawConfig) {
-  return listAgentEntries(cfg).some((entry) => Boolean(entry?.heartbeat));
-}
-
 function resolveHeartbeatConfig(cfg: OpenClawConfig, agentId: string): HeartbeatConfig | undefined {
   const defaults = cfg.agents?.defaults?.heartbeat;
   const overrides = resolveAgentConfig(cfg, agentId)?.heartbeat;
@@ -31,11 +31,9 @@ function resolveHeartbeatConfig(cfg: OpenClawConfig, agentId: string): Heartbeat
 }
 
 function listHeartbeatDoctorAgents(cfg: OpenClawConfig) {
-  if (hasExplicitHeartbeatAgents(cfg)) {
-    return listAgentEntries(cfg)
-      .filter((entry) => entry?.heartbeat)
-      .map((entry) => normalizeAgentId(entry.id))
-      .filter((agentId) => agentId);
+  const explicit = listExplicitHeartbeatAgentEntries(cfg);
+  if (explicit.length > 0) {
+    return explicit.map((entry) => normalizeAgentId(entry.id)).filter((agentId) => agentId);
   }
   if (cfg.agents?.defaults?.heartbeat) {
     return listAgentIds(cfg);

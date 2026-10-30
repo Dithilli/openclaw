@@ -33,6 +33,7 @@ import {
 export {
   listAgentEntries,
   listAgentIds,
+  listExplicitHeartbeatAgentEntries,
   resolveAgentConfig,
   resolveAgentContextLimits,
   resolveAgentDir,

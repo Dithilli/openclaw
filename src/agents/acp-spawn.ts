@@ -68,7 +68,12 @@ import {
   type AcpSpawnParentRelayHandle,
   startAcpSpawnParentStreamRelay,
 } from "./acp-spawn-parent-stream.js";
-import { listAgentIds, resolveAgentConfig, resolveDefaultAgentId } from "./agent-scope.js";
+import {
+  listAgentIds,
+  listExplicitHeartbeatAgentEntries,
+  resolveAgentConfig,
+  resolveDefaultAgentId,
+} from "./agent-scope.js";
 import {
   findAcpUnsupportedInheritedToolAllow,
   findAcpUnsupportedInheritedToolDeny,
@@ -349,13 +354,11 @@ function isHeartbeatEnabledForSessionAgent(params: {
     return true;
   }
 
-  const agentEntries = Array.isArray(params.cfg.agents?.list) ? params.cfg.agents.list : [];
-  const hasExplicitHeartbeatAgents = agentEntries.some((entry) => Boolean(entry?.heartbeat));
-  const enabledByPolicy = hasExplicitHeartbeatAgents
-    ? agentEntries.some(
-        (entry) => Boolean(entry?.heartbeat) && normalizeAgentId(entry?.id) === requesterAgentId,
-      )
-    : requesterAgentId === resolveDefaultAgentId(params.cfg);
+  const explicit = listExplicitHeartbeatAgentEntries(params.cfg);
+  const enabledByPolicy =
+    explicit.length > 0
+      ? explicit.some((entry) => normalizeAgentId(entry.id) === requesterAgentId)
+      : requesterAgentId === resolveDefaultAgentId(params.cfg);
   if (!enabledByPolicy) {
     return false;
   }

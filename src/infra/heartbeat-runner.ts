@@ -10,7 +10,12 @@ import {
   hasOutboundReplyContent,
   resolveSendableOutboundReplyParts,
 } from "openclaw/plugin-sdk/reply-payload";
-import { listAgentIds, resolveAgentConfig, resolveDefaultAgentId } from "../agents/agent-scope.js";
+import {
+  listAgentIds,
+  listExplicitHeartbeatAgentEntries,
+  resolveAgentConfig,
+  resolveDefaultAgentId,
+} from "../agents/agent-scope.js";
 import { appendCronStyleCurrentTimeLine } from "../agents/current-time.js";
 import { resolveEmbeddedSessionLane } from "../agents/embedded-agent-runner/lanes.js";
 import { listActiveEmbeddedRunSessionKeys } from "../agents/embedded-agent-runner/run-state.js";
@@ -336,11 +341,6 @@ export function resolveHeartbeatSchedulerSeed(
     .digest("hex");
 }
 
-function hasExplicitHeartbeatAgents(cfg: OpenClawConfig) {
-  const list = cfg.agents?.list ?? [];
-  return list.some((entry) => Boolean(entry?.heartbeat));
-}
-
 function resolveHeartbeatConfig(
   cfg: OpenClawConfig,
   agentId?: string,
@@ -385,10 +385,11 @@ function resolveHeartbeatForWake(params: {
 }
 
 export function resolveHeartbeatAgents(cfg: OpenClawConfig): HeartbeatAgent[] {
-  const list = cfg.agents?.list ?? [];
-  if (hasExplicitHeartbeatAgents(cfg)) {
-    return list
-      .filter((entry) => entry?.heartbeat)
+  // Enrollment drives the system-owned monitor cron rows: reading `agents.list`
+  // alone missed `agents.entries` configs and enrolled every agent under defaults.
+  const explicit = listExplicitHeartbeatAgentEntries(cfg);
+  if (explicit.length > 0) {
+    return explicit
       .map((entry) => {
         const id = normalizeAgentId(entry.id);
         return { agentId: id, heartbeat: resolveHeartbeatConfig(cfg, id) };
